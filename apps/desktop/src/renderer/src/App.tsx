@@ -6,6 +6,8 @@ import { HistorySection } from './components/HistorySection'
 import { MarkdownPreview } from './components/MarkdownPreview'
 import { ToastUndo } from './components/ToastUndo'
 import { DetailViewer } from './components/DetailViewer'
+import { SettingsModal } from './components/SettingsModal'
+import { ExportProgressModal } from './components/ExportProgressModal'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus } from 'lucide-react'
 
@@ -29,6 +31,93 @@ export const App: React.FC = () => {
   const [activeConversions, setActiveConversions] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
   const [undoToast, setUndoToast] = useState<{ message: string; recordId: number } | null>(null)
+
+  // Phase 5: Settings & Export state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<number>>(new Set())
+  const [exportModalState, setExportModalState] = useState<{
+    isOpen: boolean
+    target: 'github' | 'obsidian' | 'both'
+    status: 'exporting' | 'success' | 'error'
+    message: string
+    githubResult?: any
+    obsidianResult?: any
+    errorDetails?: string
+    pendingIds?: number[]
+  }>({
+    isOpen: false,
+    target: 'both',
+    status: 'exporting',
+    message: ''
+  })
+
+  // Multi-selection handlers
+  const handleToggleSelect = (id: number) => {
+    setSelectedHistoryIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleSelectAll = (selectAll: boolean) => {
+    if (selectAll) {
+      setSelectedHistoryIds(new Set(historyItems.map((i) => i.id)))
+    } else {
+      setSelectedHistoryIds(new Set())
+    }
+  }
+
+  const handleClearSelection = () => {
+    setSelectedHistoryIds(new Set())
+  }
+
+  // Export handler (single or batch)
+  const handleExport = async (target: 'github' | 'obsidian' | 'both', itemIds: number[]) => {
+    if (!itemIds || itemIds.length === 0) return
+
+    setExportModalState({
+      isOpen: true,
+      target,
+      status: 'exporting',
+      message: `${itemIds.length}개 문서를 ${
+        target === 'both' ? 'GitHub 및 Obsidian' : target === 'github' ? 'GitHub' : 'Obsidian'
+      }으로 내보내는 중...`,
+      pendingIds: itemIds
+    })
+
+    try {
+      const res = await window.markflowApi.exportDocuments({ targets: target, itemIds })
+      if (res.success) {
+        setExportModalState((prev) => ({
+          ...prev,
+          status: 'success',
+          message: res.message,
+          githubResult: res.githubResult,
+          obsidianResult: res.obsidianResult
+        }))
+        // Refresh list
+        await loadHistory()
+        // Clear selection
+        setSelectedHistoryIds(new Set())
+      } else {
+        setExportModalState((prev) => ({
+          ...prev,
+          status: 'error',
+          message: '내보내기 중 문제가 발생했습니다.',
+          errorDetails: res.message
+        }))
+      }
+    } catch (err: any) {
+      setExportModalState((prev) => ({
+        ...prev,
+        status: 'error',
+        message: '내보내기 실행 실패',
+        errorDetails: err.message || '알 수 없는 오류'
+      }))
+    }
+  }
 
   // Track active conversion count using ref for accurate queue scheduling
   const activeCountRef = useRef(0)
@@ -251,6 +340,7 @@ export const App: React.FC = () => {
         isDark={isDark}
         onToggleTheme={() => setIsDark((prev) => !prev)}
         reviewCount={reviewCount}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* 2. Main Content Area */}
@@ -267,6 +357,7 @@ export const App: React.FC = () => {
               handleDeleteItem(id)
               setDetailViewItem(null)
             }}
+            onExportSingle={(id, target) => handleExport(target, [id])}
           />
         ) : (
           <>
@@ -333,6 +424,11 @@ export const App: React.FC = () => {
                         onSortChange={setSortOrder}
                         onDelete={handleDeleteItem}
                         onOpenDetail={(item) => setDetailViewItem(item)}
+                        selectedIds={selectedHistoryIds}
+                        onToggleSelect={handleToggleSelect}
+                        onSelectAll={handleSelectAll}
+                        onBatchExport={(target) => handleExport(target, Array.from(selectedHistoryIds))}
+                        onClearSelection={handleClearSelection}
                       />
                     </div>
 
@@ -378,6 +474,29 @@ export const App: React.FC = () => {
             onDismiss={() => setUndoToast(null)}
           />
         )}
+
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+
+        {/* Export Progress Modal */}
+        <ExportProgressModal
+          isOpen={exportModalState.isOpen}
+          target={exportModalState.target}
+          status={exportModalState.status}
+          message={exportModalState.message}
+          githubResult={exportModalState.githubResult}
+          obsidianResult={exportModalState.obsidianResult}
+          errorDetails={exportModalState.errorDetails}
+          onClose={() => setExportModalState((prev) => ({ ...prev, isOpen: false }))}
+          onRetry={() => {
+            if (exportModalState.pendingIds) {
+              handleExport(exportModalState.target, exportModalState.pendingIds)
+            }
+          }}
+        />
       </main>
     </div>
   )

@@ -8,8 +8,18 @@ import {
   getReviewNeededCount,
   deleteConversion,
   restoreConversion,
-  updateConversion
+  updateConversion,
+  getConversionById
 } from './db'
+import {
+  loadSettings,
+  saveSettings,
+  testGitHubConnection,
+  validateObsidianVault,
+  getDefaultVaultHint
+} from './services/settingsService'
+import { exportDocumentsToGitHub } from './services/githubExporter'
+import { exportDocumentsToObsidian } from './services/obsidianExporter'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -130,6 +140,23 @@ ipcMain.handle(
         profile: result.profile || profile || 'balanced',
         markdown: result.markdown
       })
+
+      // Auto-export if enabled in settings
+      try {
+        const settings = loadSettings(true)
+        if (settings.autoExport.enabled && settings.autoExport.target !== 'none') {
+          const docs = [record]
+          if (settings.autoExport.target === 'github' || settings.autoExport.target === 'both') {
+            exportDocumentsToGitHub(docs).catch((e) => console.error('[AutoExport] GitHub export failed:', e))
+          }
+          if (settings.autoExport.target === 'obsidian' || settings.autoExport.target === 'both') {
+            exportDocumentsToObsidian(docs).catch((e) => console.error('[AutoExport] Obsidian export failed:', e))
+          }
+        }
+      } catch (err) {
+        console.warn('[AutoExport] Error during auto-export check:', err)
+      }
+
       return { ...result, id: record.id }
     }
     return result
@@ -304,6 +331,92 @@ ipcMain.handle('clipboard:write', (_event, text: string) => {
   clipboard.writeText(text)
   return true
 })
+
+// IPC Handlers: Settings
+ipcMain.handle('settings:get', () => {
+  return {
+    settings: loadSettings(false),
+    vaultHint: getDefaultVaultHint()
+  }
+})
+
+ipcMain.handle('settings:save', (_event, updates: any) => {
+  return saveSettings(updates)
+})
+
+ipcMain.handle(
+  'settings:test-github',
+  async (_event, params: { owner: string; repo: string; branch: string; pat?: string }) => {
+    return await testGitHubConnection(params.owner, params.repo, params.branch, params.pat)
+  }
+)
+
+ipcMain.handle('settings:pick-obsidian-vault', async () => {
+  if (!mainWindow) return { canceled: true }
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Obsidian 볼트 폴더 선택 (.obsidian 포함)',
+    properties: ['openDirectory']
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+
+  const selectedPath = result.filePaths[0]
+  const validation = validateObsidianVault(selectedPath)
+  return {
+    canceled: false,
+    path: selectedPath,
+    validation
+  }
+})
+
+// IPC Handlers: Export
+ipcMain.handle(
+  'export:documents',
+  async (_event, params: { targets: 'github' | 'obsidian' | 'both'; itemIds: number[] }) => {
+    const { targets, itemIds } = params
+    if (!itemIds || itemIds.length === 0) {
+      return { success: false, message: '내보낼 항목이 선택되지 않았습니다.' }
+    }
+
+    const docs = itemIds
+      .map((id) => getConversionById(id))
+      .filter((d): d is NonNullable<typeof d> => d !== null)
+
+    if (docs.length === 0) {
+      return { success: false, message: '내보낼 문서를 찾을 수 없습니다.' }
+    }
+
+    let githubResult = null
+    let obsidianResult = null
+
+    if (targets === 'github' || targets === 'both') {
+      githubResult = await exportDocumentsToGitHub(docs)
+    }
+
+    if (targets === 'obsidian' || targets === 'both') {
+      obsidianResult = await exportDocumentsToObsidian(docs)
+    }
+
+    const isSuccess =
+      (targets === 'github' && githubResult?.success) ||
+      (targets === 'obsidian' && obsidianResult?.success) ||
+      (targets === 'both' && (githubResult?.success || obsidianResult?.success))
+
+    return {
+      success: !!isSuccess,
+      githubResult,
+      obsidianResult,
+      message:
+        targets === 'both'
+          ? `내보내기 완료 (GitHub: ${githubResult?.success ? '성공' : '실패'}, Obsidian: ${obsidianResult?.success ? '성공' : '실패'})`
+          : targets === 'github'
+            ? githubResult?.message
+            : obsidianResult?.message
+    }
+  }
+)
 
 app.whenReady().then(async () => {
   createWindow()

@@ -23,6 +23,7 @@ interface SidebarProps {
   isDark: boolean
   onToggleTheme: () => void
   reviewCount?: number
+  onOpenSettings?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,7 +33,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRetryEngine,
   isDark,
   onToggleTheme,
-  reviewCount = 0
+  reviewCount = 0,
+  onOpenSettings
 }) => {
   const topNavItems = [
     { id: 'inbox', label: '수집함', icon: Inbox },
@@ -146,8 +148,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           <button
+            onClick={onOpenSettings}
             className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground hover:text-foreground transition-colors"
-            title="설정"
+            title="내보내기 및 환경 설정"
           >
             <Settings className="w-4 h-4" />
           </button>

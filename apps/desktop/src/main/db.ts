@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
+import * as os from 'os'
 import { createRequire } from 'module'
 
 const nodeRequire = createRequire(import.meta.url)
@@ -30,7 +31,9 @@ let db: Database.Database | null = null
 export function getDatabase(): Database.Database {
   if (db) return db
 
-  const userDataPath = app.getPath('userData')
+  const userDataPath = app?.getPath
+    ? app.getPath('userData')
+    : path.join(os.tmpdir(), 'markflow-test-userdata')
   if (!fs.existsSync(userDataPath)) {
     fs.mkdirSync(userDataPath, { recursive: true })
   }
@@ -62,6 +65,23 @@ export function getDatabase(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_conversions_converted_at ON conversions(converted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS export_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversion_id INTEGER,
+      target TEXT NOT NULL,
+      status TEXT NOT NULL,
+      ref_or_path TEXT,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_export_logs_conv ON export_logs(conversion_id);
   `)
 
   try {
@@ -201,6 +221,10 @@ export function updateConversion(id: number, updates: Partial<ConversionRecord>)
     fields.push('profile = @profile')
     values.profile = updates.profile
   }
+  if (updates.exported_json !== undefined) {
+    fields.push('exported_json = @exported_json')
+    values.exported_json = updates.exported_json
+  }
 
   if (fields.length > 0) {
     const updateSql = `UPDATE conversions SET ${fields.join(', ')} WHERE id = @id`
@@ -210,3 +234,50 @@ export function updateConversion(id: number, updates: Partial<ConversionRecord>)
 
   return (findStmt.get(id) as ConversionRecord) || null
 }
+
+export function getConversionById(id: number): ConversionRecord | null {
+  const database = getDatabase()
+  const stmt = database.prepare('SELECT * FROM conversions WHERE id = ?')
+  return (stmt.get(id) as ConversionRecord) || null
+}
+
+export function getSetting(key: string): string | null {
+  const database = getDatabase()
+  const stmt = database.prepare('SELECT value FROM app_settings WHERE key = ?')
+  const row = stmt.get(key) as { value: string } | undefined
+  return row ? row.value : null
+}
+
+export function setSetting(key: string, value: string): void {
+  const database = getDatabase()
+  const stmt = database.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = CURRENT_TIMESTAMP
+  `)
+  stmt.run(key, value)
+}
+
+export function logExport(
+  conversionId: number | undefined,
+  target: 'github' | 'obsidian',
+  status: 'success' | 'failed',
+  refOrPath?: string,
+  errorMessage?: string
+): void {
+  const database = getDatabase()
+  const stmt = database.prepare(`
+    INSERT INTO export_logs (conversion_id, target, status, ref_or_path, error_message)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+  stmt.run(conversionId ?? null, target, status, refOrPath ?? null, errorMessage ?? null)
+}
+
+export function getExportLogs(limit = 50): any[] {
+  const database = getDatabase()
+  const stmt = database.prepare('SELECT * FROM export_logs ORDER BY created_at DESC LIMIT ?')
+  return stmt.all(limit)
+}
+

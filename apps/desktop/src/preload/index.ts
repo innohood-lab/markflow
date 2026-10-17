@@ -55,6 +55,28 @@ export interface MarkFlowApi {
     profile: string
   ) => Promise<any>
   getOriginalFileUrl: (filePath: string) => Promise<string | null>
+  getSettings: () => Promise<{ settings: any; vaultHint: string }>
+  saveSettings: (updates: any) => Promise<any>
+  testGitHubConnection: (params: {
+    owner: string
+    repo: string
+    branch: string
+    pat?: string
+  }) => Promise<{ success: boolean; message: string }>
+  pickObsidianVault: () => Promise<{
+    canceled: boolean
+    path?: string
+    validation?: { valid: boolean; message: string }
+  }>
+  exportDocuments: (params: {
+    targets: 'github' | 'obsidian' | 'both'
+    itemIds: number[]
+  }) => Promise<{
+    success: boolean
+    message: string
+    githubResult?: any
+    obsidianResult?: any
+  }>
 }
 
 const api: MarkFlowApi = {
@@ -82,7 +104,12 @@ const api: MarkFlowApi = {
     ipcRenderer.invoke('library:save-markdown', id, libraryPath, fullMarkdown, title, status),
   backupAndReconvert: (id: number, sourcePath: string, libraryPath: string, slug: string, profile: string) =>
     ipcRenderer.invoke('library:backup-and-reconvert', id, sourcePath, libraryPath, slug, profile),
-  getOriginalFileUrl: (filePath: string) => ipcRenderer.invoke('library:read-original-file-url', filePath)
+  getOriginalFileUrl: (filePath: string) => ipcRenderer.invoke('library:read-original-file-url', filePath),
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (updates: any) => ipcRenderer.invoke('settings:save', updates),
+  testGitHubConnection: (params) => ipcRenderer.invoke('settings:test-github', params),
+  pickObsidianVault: () => ipcRenderer.invoke('settings:pick-obsidian-vault'),
+  exportDocuments: (params) => ipcRenderer.invoke('export:documents', params)
 }
 
 try {

@@ -1,6 +1,7 @@
 import React from 'react'
 import { ConversionRecord } from '../../../preload'
-import { Search, ArrowUpDown, FileText, CheckCircle, ExternalLink, Trash2 } from 'lucide-react'
+import { Search, ArrowUpDown, FileText, ExternalLink, Trash2, Github, Folder } from 'lucide-react'
+import { ExportActionBar } from './ExportActionBar'
 
 interface HistorySectionProps {
   items: ConversionRecord[]
@@ -12,6 +13,11 @@ interface HistorySectionProps {
   onSortChange: (sort: 'latest' | 'name') => void
   onDelete: (id: number) => void
   onOpenDetail?: (item: ConversionRecord) => void
+  selectedIds?: Set<number>
+  onToggleSelect?: (id: number) => void
+  onSelectAll?: (selectAll: boolean) => void
+  onBatchExport?: (target: 'github' | 'obsidian' | 'both') => void
+  onClearSelection?: () => void
 }
 
 export const HistorySection: React.FC<HistorySectionProps> = ({
@@ -23,12 +29,38 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
   sortOrder,
   onSortChange,
   onDelete,
-  onOpenDetail
+  onOpenDetail,
+  selectedIds = new Set(),
+  onToggleSelect,
+  onSelectAll,
+  onBatchExport,
+  onClearSelection
 }) => {
+  const allSelected = items.length > 0 && selectedIds.size === items.length
+
+  const handleMasterCheckbox = () => {
+    if (onSelectAll) {
+      onSelectAll(!allSelected)
+    }
+  }
+
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-background select-none">
+    <div className="relative flex flex-col h-full overflow-hidden bg-background select-none">
       {/* Top Search & Filter Bar */}
       <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between gap-3 shrink-0 bg-sidebar-background/30">
+        {/* Master select checkbox */}
+        {items.length > 0 && onSelectAll && (
+          <div className="flex items-center pr-1">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={handleMasterCheckbox}
+              title={allSelected ? '전체 선택 해제' : '전체 선택'}
+              className="w-3.5 h-3.5 rounded border-stone-300 dark:border-stone-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+          </div>
+        )}
+
         <div className="relative flex-1">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -55,7 +87,7 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
       </div>
 
       {/* History Items List */}
-      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1 pb-16">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-xs">
             <FileText className="w-8 h-8 stroke-[1.2] text-muted-foreground/40 mb-2" />
@@ -67,6 +99,16 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
         ) : (
           items.map((item) => {
             const isSelected = selectedItem?.id === item.id
+            const isChecked = selectedIds.has(item.id)
+
+            // Parse exported metadata
+            let exportedMeta: { github?: boolean; obsidian?: boolean } = {}
+            if (item.exported_json) {
+              try {
+                exportedMeta = JSON.parse(item.exported_json)
+              } catch {}
+            }
+
             return (
               <div
                 key={item.id}
@@ -75,28 +117,65 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
                 className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-fast border ${
                   isSelected
                     ? 'bg-sidebar-accent border-primary/40 shadow-subtle'
+                    : isChecked
+                    ? 'bg-blue-50/40 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50'
                     : 'bg-card border-border/60 hover:border-border hover:bg-muted/40'
                 }`}
               >
-                <div className="min-w-0 pr-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 shrink-0">
-                      {item.source_type}
-                    </span>
-                    <h3
-                      className={`text-xs font-semibold truncate ${
-                        isSelected ? 'text-primary' : 'text-foreground'
-                      }`}
-                      title={item.title}
-                    >
-                      {item.title}
-                    </h3>
-                  </div>
+                <div className="flex items-center gap-2.5 min-w-0 pr-3">
+                  {/* Item Checkbox */}
+                  {onToggleSelect && (
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        onToggleSelect(item.id)
+                      }}
+                      className="w-3.5 h-3.5 rounded border-stone-300 dark:border-stone-700 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                  )}
 
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
-                    <span>{item.source_file}</span>
-                    <span>·</span>
-                    <span>{item.converted_at?.slice(0, 16).replace('T', ' ')}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 shrink-0">
+                        {item.source_type}
+                      </span>
+                      <h3
+                        className={`text-xs font-semibold truncate ${
+                          isSelected ? 'text-primary' : 'text-foreground'
+                        }`}
+                        title={item.title}
+                      >
+                        {item.title}
+                      </h3>
+
+                      {/* Exported Badges */}
+                      {exportedMeta.github && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0"
+                          title="GitHub LLM-wiki에 내보내짐"
+                        >
+                          <Github size={9} />
+                          wiki
+                        </span>
+                      )}
+                      {exportedMeta.obsidian && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
+                          title="Obsidian 보관함에 내보내짐"
+                        >
+                          <Folder size={9} />
+                          obsidian
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-1">
+                      <span>{item.source_file}</span>
+                      <span>·</span>
+                      <span>{item.converted_at?.slice(0, 16).replace('T', ' ')}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -156,6 +235,15 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
           })
         )}
       </div>
+
+      {/* Floating Batch Export Bar */}
+      {selectedIds.size > 0 && onBatchExport && onClearSelection && (
+        <ExportActionBar
+          selectedCount={selectedIds.size}
+          onExport={onBatchExport}
+          onClearSelection={onClearSelection}
+        />
+      )}
     </div>
   )
 }
