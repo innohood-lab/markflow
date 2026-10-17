@@ -157,6 +157,16 @@ export interface MarkFlowApi {
   addHighlight: (filePath: string, selectedText: string) => Promise<{ success: boolean; markdown?: string; error?: string }>
   addFootnoteNote: (filePath: string, selectedText: string, noteText: string) => Promise<{ success: boolean; markdown?: string; error?: string }>
   getAllHighlights: () => Promise<any[]>
+
+  // Phase 8-(다): AI Recommendations & Duplicate Detection
+  getAiRecommendations: (text: string, slug?: string) => Promise<{
+    suggestedGroup: string | null
+    groupConfidence: number
+    suggestedTags: string[]
+    isDuplicate: boolean
+    duplicateMatch: { slug: string; title: string; score: number } | null
+    relatedDocuments: { slug: string; title: string; score: number; snippet: string; groups?: string[] }[]
+  }>
 }
 
 const api: MarkFlowApi = {
@@ -243,7 +253,10 @@ const api: MarkFlowApi = {
   addHighlight: (filePath, selectedText) => ipcRenderer.invoke('wiki:add-highlight', filePath, selectedText),
   addFootnoteNote: (filePath, selectedText, noteText) =>
     ipcRenderer.invoke('wiki:add-note', filePath, selectedText, noteText),
-  getAllHighlights: () => ipcRenderer.invoke('wiki:get-all-highlights')
+  getAllHighlights: () => ipcRenderer.invoke('wiki:get-all-highlights'),
+
+  // Phase 8-(다): AI Recommendations & Duplicate Detection
+  getAiRecommendations: (text, slug) => ipcRenderer.invoke('ai:get-recommendations', text, slug)
 }
 
 try {

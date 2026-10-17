@@ -52,6 +52,7 @@ import {
   addFootnoteNoteToDocument,
   getAllHighlights
 } from './services/wikiLinkService'
+import { getRecommendations } from './services/aiRecommendationService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -618,6 +619,11 @@ ipcMain.handle('wiki:add-note', (_event, filePath: string, selectedText: string,
 
 ipcMain.handle('wiki:get-all-highlights', () => {
   return getAllHighlights(getLibraryDir())
+})
+
+// IPC Handlers: Phase 8-(다) AI Recommendations & Duplicate Detection
+ipcMain.handle('ai:get-recommendations', async (_event, text: string, slug?: string) => {
+  return await getRecommendations(text, slug, getLibraryDir(), sidecar)
 })
 
 app.whenReady().then(async () => {

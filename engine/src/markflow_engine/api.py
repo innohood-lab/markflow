@@ -1,10 +1,10 @@
-import importlib.metadata
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from markflow_engine.converter import convert_document
+from markflow_engine.similarity import analyze_recommendations
 
 app = FastAPI(
     title="MarkFlow Engine",
@@ -26,6 +26,14 @@ class ConvertRequest(BaseModel):
     library_dir: Optional[str] = None
     profile: Optional[str] = "balanced"
     llm_config: Optional[dict] = None
+
+
+class RecommendationRequest(BaseModel):
+    text: str
+    slug: Optional[str] = None
+    candidates: List[Dict[str, Any]] = []
+    top_k: Optional[int] = 5
+    duplicate_threshold: Optional[float] = 0.90
 
 
 def get_markitdown_version() -> str:
@@ -57,3 +65,15 @@ def convert(request: ConvertRequest):
         profile=request.profile or "balanced",
         llm_config_dict=request.llm_config,
     )
+
+
+@app.post("/similarity/recommendations")
+def recommendations(request: RecommendationRequest):
+    return analyze_recommendations(
+        target_text=request.text,
+        target_slug=request.slug,
+        candidates=request.candidates,
+        top_k=request.top_k or 5,
+        duplicate_threshold=request.duplicate_threshold or 0.90,
+    )
+

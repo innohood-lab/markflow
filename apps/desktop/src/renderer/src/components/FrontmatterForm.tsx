@@ -6,6 +6,7 @@ export interface FrontmatterData {
   status: string
   tags: string[]
   category: string
+  groups?: string[]
 }
 
 interface FrontmatterFormProps {

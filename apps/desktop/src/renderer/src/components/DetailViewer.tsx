@@ -17,7 +17,11 @@ import {
   Folder,
   Zap,
   ChevronDown,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Sparkles,
+  AlertTriangle,
+  Compass,
+  X
 } from 'lucide-react'
 import { FrontmatterForm, FrontmatterData } from './FrontmatterForm'
 import { CompareSplitView } from './CompareSplitView'
@@ -51,6 +55,18 @@ export const DetailViewer: React.FC<DetailViewerProps> = ({
   const [backlinks, setBacklinks] = useState<{ sourceSlug: string; sourceTitle: string; snippet: string }[]>([])
   const [backlinksOpen, setBacklinksOpen] = useState(true)
 
+  // Phase 8-(다) AI Recommendations & Duplicate state
+  const [aiRecs, setAiRecs] = useState<{
+    suggestedGroup: string | null
+    groupConfidence: number
+    suggestedTags: string[]
+    isDuplicate: boolean
+    duplicateMatch: { slug: string; title: string; score: number } | null
+    relatedDocuments: { slug: string; title: string; score: number; snippet: string; groups?: string[] }[]
+  } | null>(null)
+  const [relatedOpen, setRelatedOpen] = useState(true)
+  const [dismissDuplicate, setDismissDuplicate] = useState(false)
+
   // Fetch backlinks for current document
   React.useEffect(() => {
     if (window.markflowApi?.getBacklinks && item.title) {
@@ -67,6 +83,7 @@ export const DetailViewer: React.FC<DetailViewerProps> = ({
     let title = item.title
     let status = item.status || 'inbox'
     let tags: string[] = []
+    let groups: string[] = []
     let category = ''
     let body = mdText
 
@@ -92,20 +109,40 @@ export const DetailViewer: React.FC<DetailViewerProps> = ({
             .map((t) => t.trim().replace(/^['"]|['"]$/g, ''))
             .filter(Boolean)
         }
+
+        const groupsMatch = fmStr.match(/groups:\s*\[([^\]]*)\]/)
+        if (groupsMatch && groupsMatch[1].trim()) {
+          groups = groupsMatch[1]
+            .split(',')
+            .map((g) => g.trim().replace(/^['"]|['"]$/g, ''))
+            .filter(Boolean)
+        }
       }
     }
 
     return {
-      data: { title, status, tags, category },
+      data: { title, status, tags, category, groups },
       body
     }
   }
 
   const { data: fmData, body: currentBody } = parseFrontmatter(item.markdown || '')
 
+  // Fetch AI Recommendations & Duplicate check
+  React.useEffect(() => {
+    if (window.markflowApi?.getAiRecommendations && currentBody) {
+      window.markflowApi.getAiRecommendations(currentBody, item.slug).then((res) => {
+        setAiRecs(res)
+      }).catch(() => {
+        setAiRecs(null)
+      })
+    }
+  }, [item.slug, currentBody])
+
   // Re-serialize Frontmatter + Body
   const serializeMarkdown = (newFmData: FrontmatterData, bodyContent: string): string => {
     const tagsFormatted = `[${newFmData.tags.map((t) => `"${t}"`).join(', ')}]`
+    const groupsFormatted = `[${(newFmData.groups || []).map((g) => `"${g}"`).join(', ')}]`
     const qsLine = item.quality_score !== undefined && item.quality_score !== null ? `quality_score: ${item.quality_score}` : 'quality_score: null'
     const profLine = `profile: "${item.profile || 'balanced'}"`
 
@@ -119,7 +156,7 @@ ${profLine}
 ${qsLine}
 status: "${newFmData.status}"
 tags: ${tagsFormatted}
-groups: []
+groups: ${groupsFormatted}
 category: "${newFmData.category}"
 source_location: ""
 exported:
@@ -149,6 +186,16 @@ ${bodyContent}`
         onUpdateItem(res.item)
       }
     }
+  }
+
+  // Apply suggested group
+  const handleApplySuggestedGroup = async () => {
+    if (!aiRecs?.suggestedGroup) return
+    const currentGroups = fmData.groups || []
+    if (currentGroups.includes(aiRecs.suggestedGroup)) return
+
+    const updatedGroups = [...currentGroups, aiRecs.suggestedGroup]
+    await handleFrontmatterChange({ ...fmData, groups: updatedGroups })
   }
 
   // Handle Editor Body changes
@@ -364,6 +411,57 @@ ${bodyContent}`
         </div>
       </div>
 
+      {/* Duplicate Warning Banner */}
+      {aiRecs?.isDuplicate && !dismissDuplicate && aiRecs.duplicateMatch && (
+        <div className="px-5 py-2.5 bg-amber-500/10 border-b border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 shrink-0 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="truncate">
+              <strong>중복 감지:</strong> 기존 문서 &apos;{aiRecs.duplicateMatch.title}&apos;와 내용이{' '}
+              <strong>{aiRecs.duplicateMatch.score}%</strong> 일치합니다.
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigateDocument?.(aiRecs.duplicateMatch!.slug)}
+              className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 font-semibold text-xs transition-colors"
+            >
+              원본 비교
+            </button>
+            <button
+              type="button"
+              onClick={() => setDismissDuplicate(true)}
+              className="p-1 hover:bg-amber-500/20 rounded transition-colors text-amber-700 dark:text-amber-300"
+              title="닫기"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Suggested Group (Auto Categorization) Banner */}
+      {aiRecs?.suggestedGroup && !(fmData.groups || []).includes(aiRecs.suggestedGroup) && (
+        <div className="px-5 py-2 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shrink-0 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+            <span className="truncate">
+              <strong>AI 자동 분류 제안:</strong> 이 문서는{' '}
+              <strong className="text-indigo-600 dark:text-indigo-400">[{aiRecs.suggestedGroup}]</strong> 그룹과{' '}
+              {aiRecs.groupConfidence}% 유사합니다.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleApplySuggestedGroup}
+            className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors shadow-subtle shrink-0"
+          >
+            분류 적용
+          </button>
+        </div>
+      )}
+
       {/* Frontmatter Properties Bar */}
       <FrontmatterForm
         data={fmData}
@@ -406,7 +504,7 @@ ${bodyContent}`
               </button>
 
               {backlinksOpen && (
-                <div className="px-5 pb-3 max-h-40 overflow-y-auto space-y-1.5 animate-in fade-in duration-100">
+                <div className="px-5 pb-3 max-h-36 overflow-y-auto space-y-1.5 animate-in fade-in duration-100">
                   {backlinks.length === 0 ? (
                     <div className="text-[11px] text-muted-foreground/70 py-1">
                       이 문서를 참조하는 다른 문서가 없습니다.
@@ -435,6 +533,61 @@ ${bodyContent}`
                 </div>
               )}
             </div>
+
+            {/* Related Documents Section (AI Recommendations / See Also) */}
+            {aiRecs && aiRecs.relatedDocuments.length > 0 && (
+              <div className="border-t border-border/70 bg-sidebar-background/20 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRelatedOpen(!relatedOpen)}
+                  className="w-full px-5 py-2 flex items-center justify-between text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>관련 문서 (AI 추천)</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
+                      {aiRecs.relatedDocuments.length}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      relatedOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {relatedOpen && (
+                  <div className="px-5 pb-3 max-h-36 overflow-y-auto space-y-1.5 animate-in fade-in duration-100">
+                    {aiRecs.relatedDocuments.map((rel, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => onNavigateDocument?.(rel.slug)}
+                        className="p-2 rounded-lg bg-card/80 border border-border/60 hover:border-indigo-500/40 hover:bg-muted/60 transition-all cursor-pointer group text-xs"
+                      >
+                        <div className="flex items-center justify-between font-semibold text-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-[11px]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span>{rel.title}</span>
+                            {rel.groups && rel.groups.length > 0 && (
+                              <span className="px-1 py-0.2 rounded bg-muted text-[10px] text-muted-foreground font-normal">
+                                {rel.groups[0]}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 font-mono ml-2 shrink-0">
+                            {rel.score}% 유사
+                          </span>
+                        </div>
+                        {rel.snippet && (
+                          <div className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1 font-mono">
+                            {rel.snippet}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'compare' && (
