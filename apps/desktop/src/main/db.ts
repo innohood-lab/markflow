@@ -55,6 +55,7 @@ export function getDatabase(): Database.Database {
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
 
+  // 1. Create base tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,18 +83,17 @@ export function getDatabase(): Database.Database {
       is_deleted INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_conversions_converted_at ON conversions(converted_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);
-    CREATE INDEX IF NOT EXISTS idx_conversions_hash ON conversions(file_hash);
-    CREATE INDEX IF NOT EXISTS idx_conversions_category ON conversions(category);
-    CREATE INDEX IF NOT EXISTS idx_conversions_starred ON conversions(is_starred);
+  `)
 
+  db.exec(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `)
 
+  db.exec(`
     CREATE TABLE IF NOT EXISTS export_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       conversion_id INTEGER,
@@ -103,37 +103,26 @@ export function getDatabase(): Database.Database {
       error_message TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_export_logs_conv ON export_logs(conversion_id);
   `)
 
-  // Safe migrations for newly added columns
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN profile TEXT DEFAULT 'balanced';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN source_location TEXT;`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN file_hash TEXT;`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN tags_json TEXT DEFAULT '[]';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN category TEXT DEFAULT '';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN first_image TEXT DEFAULT '';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN custom_json TEXT DEFAULT '{}';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN groups_json TEXT DEFAULT '[]';`)
-  } catch {}
-  try {
-    db.exec(`ALTER TABLE conversions ADD COLUMN is_starred INTEGER DEFAULT 0;`)
-  } catch {}
+  // 2. Safe migrations for newly added columns
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN profile TEXT DEFAULT 'balanced';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN source_location TEXT;`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN file_hash TEXT;`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN tags_json TEXT DEFAULT '[]';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN category TEXT DEFAULT '';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN first_image TEXT DEFAULT '';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN custom_json TEXT DEFAULT '{}';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN groups_json TEXT DEFAULT '[]';`) } catch {}
+  try { db.exec(`ALTER TABLE conversions ADD COLUMN is_starred INTEGER DEFAULT 0;`) } catch {}
+
+  // 3. Safe index creations after migration
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversions_converted_at ON conversions(converted_at DESC);`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversions_hash ON conversions(file_hash);`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversions_category ON conversions(category);`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversions_starred ON conversions(is_starred);`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_export_logs_conv ON export_logs(conversion_id);`) } catch {}
 
   // FTS5 Full-Text Search Virtual Table with Trigram Tokenizer
   try {
