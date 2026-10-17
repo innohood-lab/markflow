@@ -39,6 +39,22 @@ export interface MarkFlowApi {
   showItemInFolder: (path: string) => Promise<boolean>
   copyToClipboard: (text: string) => Promise<boolean>
   getAssetDataUrl: (relPath: string) => Promise<string | null>
+  openPath: (filePath: string) => Promise<string>
+  saveMarkdown: (
+    id: number,
+    libraryPath: string,
+    fullMarkdown: string,
+    title?: string,
+    status?: string
+  ) => Promise<{ success: boolean; item?: any; error?: string }>
+  backupAndReconvert: (
+    id: number,
+    sourcePath: string,
+    libraryPath: string,
+    slug: string,
+    profile: string
+  ) => Promise<any>
+  getOriginalFileUrl: (filePath: string) => Promise<string | null>
 }
 
 const api: MarkFlowApi = {
@@ -60,7 +76,13 @@ const api: MarkFlowApi = {
   restoreHistoryItem: (id: number) => ipcRenderer.invoke('db:restore-item', id),
   showItemInFolder: (path: string) => ipcRenderer.invoke('shell:show-item', path),
   copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
-  getAssetDataUrl: (relPath: string) => ipcRenderer.invoke('library:get-asset-data-url', relPath)
+  getAssetDataUrl: (relPath: string) => ipcRenderer.invoke('library:get-asset-data-url', relPath),
+  openPath: (filePath: string) => ipcRenderer.invoke('shell:open-path', filePath),
+  saveMarkdown: (id: number, libraryPath: string, fullMarkdown: string, title?: string, status?: string) =>
+    ipcRenderer.invoke('library:save-markdown', id, libraryPath, fullMarkdown, title, status),
+  backupAndReconvert: (id: number, sourcePath: string, libraryPath: string, slug: string, profile: string) =>
+    ipcRenderer.invoke('library:backup-and-reconvert', id, sourcePath, libraryPath, slug, profile),
+  getOriginalFileUrl: (filePath: string) => ipcRenderer.invoke('library:read-original-file-url', filePath)
 }
 
 try {

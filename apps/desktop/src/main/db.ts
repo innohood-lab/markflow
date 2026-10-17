@@ -171,3 +171,42 @@ export function restoreConversion(id: number): ConversionRecord | null {
   const findStmt = database.prepare('SELECT * FROM conversions WHERE id = ?')
   return (findStmt.get(id) as ConversionRecord) || null
 }
+
+export function updateConversion(id: number, updates: Partial<ConversionRecord>): ConversionRecord | null {
+  const database = getDatabase()
+  const findStmt = database.prepare('SELECT * FROM conversions WHERE id = ?')
+  const existing = findStmt.get(id) as ConversionRecord | undefined
+  if (!existing) return null
+
+  const fields: string[] = []
+  const values: any = { id }
+
+  if (updates.title !== undefined) {
+    fields.push('title = @title')
+    values.title = updates.title
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = @status')
+    values.status = updates.status
+  }
+  if (updates.markdown !== undefined) {
+    fields.push('markdown = @markdown')
+    values.markdown = updates.markdown
+  }
+  if (updates.quality_score !== undefined) {
+    fields.push('quality_score = @quality_score')
+    values.quality_score = updates.quality_score
+  }
+  if (updates.profile !== undefined) {
+    fields.push('profile = @profile')
+    values.profile = updates.profile
+  }
+
+  if (fields.length > 0) {
+    const updateSql = `UPDATE conversions SET ${fields.join(', ')} WHERE id = @id`
+    const stmt = database.prepare(updateSql)
+    stmt.run(values)
+  }
+
+  return (findStmt.get(id) as ConversionRecord) || null
+}

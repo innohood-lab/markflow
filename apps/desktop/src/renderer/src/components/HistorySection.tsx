@@ -11,6 +11,7 @@ interface HistorySectionProps {
   sortOrder: 'latest' | 'name'
   onSortChange: (sort: 'latest' | 'name') => void
   onDelete: (id: number) => void
+  onOpenDetail?: (item: ConversionRecord) => void
 }
 
 export const HistorySection: React.FC<HistorySectionProps> = ({
@@ -21,7 +22,8 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
   onSearchChange,
   sortOrder,
   onSortChange,
-  onDelete
+  onDelete,
+  onOpenDetail
 }) => {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background select-none">
@@ -69,6 +71,7 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
               <div
                 key={item.id}
                 onClick={() => onSelectItem(item)}
+                onDoubleClick={() => onOpenDetail?.(item)}
                 className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-fast border ${
                   isSelected
                     ? 'bg-sidebar-accent border-primary/40 shadow-subtle'
@@ -97,7 +100,7 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
                   </div>
                 </div>
 
-                {/* Right badges & delete button */}
+                {/* Right badges & actions */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   {/* Quality Score Badge */}
                   {item.quality_score !== undefined && item.quality_score !== null && (
@@ -124,12 +127,25 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
                     </span>
                   )}
 
+                  {/* Open Detail button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenDetail?.(item)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all ml-1"
+                    title="상세 보기 (미리보기 · 원본비교 · 편집)"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Delete button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       onDelete(item.id)
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all ml-1"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all"
                     title="삭제"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

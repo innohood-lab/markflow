@@ -7,7 +7,8 @@ import {
   getConversions,
   getReviewNeededCount,
   deleteConversion,
-  restoreConversion
+  restoreConversion,
+  updateConversion
 } from './db'
 
 let mainWindow: BrowserWindow | null = null
@@ -160,6 +161,60 @@ ipcMain.handle('db:restore-item', (_event, id: number) => {
   return restoreConversion(id)
 })
 
+ipcMain.handle(
+  'library:save-markdown',
+  async (_event, id: number, libraryPath: string, fullMarkdown: string, title?: string, status?: string) => {
+    try {
+      if (fs.existsSync(libraryPath)) {
+        fs.writeFileSync(libraryPath, fullMarkdown, 'utf-8')
+      }
+      const updated = updateConversion(id, {
+        markdown: fullMarkdown,
+        title: title,
+        status: status
+      })
+      return { success: true, item: updated }
+    } catch (err: any) {
+      console.error('[Main] Save markdown error:', err)
+      return { success: false, error: err?.message || String(err) }
+    }
+  }
+)
+
+ipcMain.handle(
+  'library:backup-and-reconvert',
+  async (_event, id: number, sourcePath: string, libraryPath: string, slug: string, profile: string) => {
+    try {
+      // 1. Backup existing markdown to Library/.history/
+      const home = app.getPath('documents')
+      const historyDir = join(home, 'MarkFlow', 'Library', '.history')
+      if (!fs.existsSync(historyDir)) {
+        fs.mkdirSync(historyDir, { recursive: true })
+      }
+
+      if (fs.existsSync(libraryPath)) {
+        const backupFileName = `${slug}.${Date.now()}.md`
+        fs.copyFileSync(libraryPath, join(historyDir, backupFileName))
+      }
+
+      // 2. Run sidecar reconversion
+      const res = await sidecar.convertDocument(sourcePath, undefined, profile)
+      if (res.status === 'success') {
+        const updated = updateConversion(id, {
+          markdown: res.markdown,
+          quality_score: res.quality_score ?? null,
+          profile: profile,
+          status: res.quality_report?.review_needed ? 'review_needed' : 'inbox'
+        })
+        return { success: true, result: res, item: updated }
+      }
+      return { success: false, message: res.message || '재변환 실패' }
+    } catch (err: any) {
+      return { success: false, error: err?.message || String(err) }
+    }
+  }
+)
+
 ipcMain.handle('library:get-asset-data-url', async (_event, relPath: string) => {
   try {
     const home = app.getPath('documents')
@@ -176,7 +231,33 @@ ipcMain.handle('library:get-asset-data-url', async (_event, relPath: string) => 
   return null
 })
 
+ipcMain.handle('library:read-original-file-url', async (_event, filePath: string) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      const ext = extname(filePath).toLowerCase()
+      const buffer = fs.readFileSync(filePath)
+      if (ext === '.pdf') {
+        return `data:application/pdf;base64,${buffer.toString('base64')}`
+      } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+        const mime = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : 'image/jpeg')
+        return `data:${mime};base64,${buffer.toString('base64')}`
+      } else if (['.html', '.htm'].includes(ext)) {
+        return buffer.toString('utf-8')
+      }
+    }
+  } catch (err) {
+    console.warn('[Main] Error reading original file:', err)
+  }
+  return null
+})
+
 // IPC Handlers: OS & Shell
+ipcMain.handle('shell:open-path', async (_event, filePath: string) => {
+  if (fs.existsSync(filePath)) {
+    return await shell.openPath(filePath)
+  }
+  return '파일이 존재하지 않습니다.'
+})
 ipcMain.handle('dialog:open-files', async () => {
   if (!mainWindow) return []
   const result = await dialog.showOpenDialog(mainWindow, {

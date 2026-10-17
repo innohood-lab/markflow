@@ -5,7 +5,7 @@ import { QueueSection, QueueItem } from './components/QueueSection'
 import { HistorySection } from './components/HistorySection'
 import { MarkdownPreview } from './components/MarkdownPreview'
 import { ToastUndo } from './components/ToastUndo'
-import { EmptyState } from './components/EmptyState'
+import { DetailViewer } from './components/DetailViewer'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus } from 'lucide-react'
 
@@ -23,6 +23,7 @@ export const App: React.FC = () => {
   const [autoConvert, setAutoConvert] = useState(true)
   const [historyItems, setHistoryItems] = useState<ConversionRecord[]>([])
   const [selectedItem, setSelectedItem] = useState<ConversionRecord | null>(null)
+  const [detailViewItem, setDetailViewItem] = useState<ConversionRecord | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<'latest' | 'name'>('latest')
   const [activeConversions, setActiveConversions] = useState(0)
@@ -254,90 +255,105 @@ export const App: React.FC = () => {
 
       {/* 2. Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-background relative">
-        {/* Top Header */}
-        <header className="px-6 py-4 shrink-0 border-b border-border/40 select-text flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {currentView === 'review' ? '검토 필요' : '수집함'}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {currentView === 'review'
-                ? '품질 점수가 70점 미만이거나 스캔 등 확인이 필요한 문서 목록입니다'
-                : '새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {currentView === 'review' ? '검토 대상' : '보관 문서'}:{' '}
-              <strong className="text-foreground">{historyItems.length}</strong>건
-            </span>
-          </div>
-        </header>
-
-        {/* 2-Pane Split: Left Queue, Right History & Preview */}
-        {currentView === 'inbox' || currentView === 'review' ? (
-          <SplitPane
-            defaultLeftWidthPercent={42}
-            minLeftWidth={320}
-            minRightWidth={420}
-            left={
-              <QueueSection
-                queue={queue}
-                onAddFiles={handleAddFiles}
-                onRemoveItem={handleRemoveQueueItem}
-                onClearQueue={handleClearQueue}
-                onConvertAll={handleConvertAll}
-                onRetryItem={(id) => {
-                  setQueue((prev) =>
-                    prev.map((q) => (q.id === id ? { ...q, status: 'pending', errorMessage: undefined } : q))
-                  )
-                }}
-                autoConvert={autoConvert}
-                onToggleAutoConvert={setAutoConvert}
-                isConverting={activeConversions > 0}
-                profile={profile}
-                onProfileChange={setProfile}
-              />
-            }
-            right={
-              <div className="flex-1 flex flex-col h-full overflow-hidden">
-                {/* Upper Right: History List (Takes top half if preview open, full if not) */}
-                <div
-                  className={`overflow-hidden transition-all duration-normal flex flex-col ${
-                    selectedItem ? 'h-64 border-b border-border/60 shrink-0' : 'flex-1'
-                  }`}
-                >
-                  <HistorySection
-                    items={historyItems}
-                    selectedItem={selectedItem}
-                    onSelectItem={setSelectedItem}
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    sortOrder={sortOrder}
-                    onSortChange={setSortOrder}
-                    onDelete={handleDeleteItem}
-                  />
-                </div>
-
-                {/* Lower Right: Rendered Markdown Preview */}
-                {selectedItem && (
-                  <div className="flex-1 overflow-hidden flex flex-col">
-                    <MarkdownPreview
-                      item={selectedItem}
-                      onDelete={handleDeleteItem}
-                    />
-                  </div>
-                )}
-              </div>
-            }
+        {detailViewItem ? (
+          <DetailViewer
+            item={detailViewItem}
+            onBack={() => setDetailViewItem(null)}
+            onUpdateItem={(updated) => {
+              setDetailViewItem(updated)
+              loadHistory()
+            }}
+            onDelete={(id) => {
+              handleDeleteItem(id)
+              setDetailViewItem(null)
+            }}
           />
         ) : (
-          <div className="flex-1 flex flex-col justify-center items-center">
-            <EmptyState
-              title={`${currentView} 화면 준비 중`}
-              description="이 기능은 다음 단계에서 연결됩니다."
-            />
-          </div>
+          <>
+            {/* Top Header */}
+            <header className="px-6 py-4 shrink-0 border-b border-border/40 select-text flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-foreground">
+                  {currentView === 'review' ? '검토 필요' : '수집함'}
+                </h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {currentView === 'review'
+                    ? '품질 점수가 70점 미만이거나 스캔 등 확인이 필요한 문서 목록입니다'
+                    : '새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {currentView === 'review' ? '검토 대상' : '보관 문서'}:{' '}
+                  <strong className="text-foreground">{historyItems.length}</strong>건
+                </span>
+              </div>
+            </header>
+
+            {/* 2-Pane Split: Left Queue, Right History & Preview */}
+            {currentView === 'inbox' || currentView === 'review' ? (
+              <SplitPane
+                defaultLeftWidthPercent={42}
+                minLeftWidth={320}
+                minRightWidth={420}
+                left={
+                  <QueueSection
+                    queue={queue}
+                    onAddFiles={handleAddFiles}
+                    onRemoveItem={handleRemoveQueueItem}
+                    onClearQueue={handleClearQueue}
+                    onConvertAll={handleConvertAll}
+                    onRetryItem={(id) => {
+                      setQueue((prev) =>
+                        prev.map((q) => (q.id === id ? { ...q, status: 'pending', errorMessage: undefined } : q))
+                      )
+                    }}
+                    autoConvert={autoConvert}
+                    onToggleAutoConvert={setAutoConvert}
+                    isConverting={activeConversions > 0}
+                    profile={profile}
+                    onProfileChange={setProfile}
+                  />
+                }
+                right={
+                  <div className="flex-1 flex flex-col h-full overflow-hidden">
+                    {/* Upper Right: History List (Takes top half if preview open, full if not) */}
+                    <div
+                      className={`overflow-hidden transition-all duration-normal flex flex-col ${
+                        selectedItem ? 'h-64 border-b border-border/60 shrink-0' : 'flex-1'
+                      }`}
+                    >
+                      <HistorySection
+                        items={historyItems}
+                        selectedItem={selectedItem}
+                        onSelectItem={setSelectedItem}
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        sortOrder={sortOrder}
+                        onSortChange={setSortOrder}
+                        onDelete={handleDeleteItem}
+                        onOpenDetail={(item) => setDetailViewItem(item)}
+                      />
+                    </div>
+
+                    {/* Lower Right: Rendered Markdown Preview */}
+                    {selectedItem && (
+                      <div className="flex-1 overflow-hidden flex flex-col">
+                        <MarkdownPreview
+                          item={selectedItem}
+                          onDelete={handleDeleteItem}
+                        />
+                      </div>
+                    )}
+                  </div>
+                }
+              />
+            ) : (
+              <div className="flex-1 flex flex-col justify-center items-center">
+                <p className="text-muted-foreground text-sm">{currentView} 화면 준비 중</p>
+              </div>
+            )}
+          </>
         )}
 
         {/* Floating Quick Add (+) Button */}
