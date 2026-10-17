@@ -1,6 +1,8 @@
 packages:
   - 'apps/*'
 
+verifyDepsBeforeRun: false
+
 allowBuilds:
   electron: true
   esbuild: true

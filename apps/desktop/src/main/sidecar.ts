@@ -52,6 +52,27 @@ export class SidecarManager {
   }
 
   /**
+   * Request document conversion from the sidecar engine
+   */
+  public async convertDocument(filePath: string, libraryDir?: string): Promise<any> {
+    if (this.currentStatus.state !== 'ready' || !this.port) {
+      throw new Error('변환 엔진이 준비되지 않았습니다. 사이드바 하단 상태를 확인해 주세요.')
+    }
+
+    const response = await fetch(`http://127.0.0.1:${this.port}/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_path: filePath, library_dir: libraryDir })
+    })
+
+    if (!response.ok) {
+      throw new Error(`엔진 통신 오류 (HTTP ${response.status}): ${await response.text()}`)
+    }
+
+    return await response.json()
+  }
+
+  /**
    * Find an available unused TCP port on 127.0.0.1
    */
   public async getAvailablePort(): Promise<number> {

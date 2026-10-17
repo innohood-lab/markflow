@@ -1,6 +1,10 @@
 import importlib.metadata
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from markflow_engine.converter import convert_document
 
 app = FastAPI(
     title="MarkFlow Engine",
@@ -15,6 +19,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ConvertRequest(BaseModel):
+    file_path: str
+    library_dir: Optional[str] = None
 
 
 def get_markitdown_version() -> str:
@@ -36,3 +45,8 @@ def health():
         "version": "0.1.0",
         "markitdown_version": get_markitdown_version(),
     }
+
+
+@app.post("/convert")
+def convert(request: ConvertRequest):
+    return convert_document(file_path=request.file_path, library_dir_str=request.library_dir)

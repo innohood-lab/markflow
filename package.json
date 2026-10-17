@@ -8,5 +8,11 @@
     "test": "pnpm --filter @markflow/desktop test",
     "test:engine": "cd engine && uv run pytest",
     "test:all": "pnpm test && pnpm test:engine"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.8.1"
+  },
+  "pnpm": {
+    "verifyDepsBeforeRun": false
   }
 }
