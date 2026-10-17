@@ -152,10 +152,14 @@ export async function getRecommendations(
     const status = sidecar.getStatus()
     if (status.state === 'ready' && status.port) {
       try {
-        const url = `http://127.0.0.1:${status.port}/similarity/recommendations`
+        const secret = sidecar.getSecret?.()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (secret) {
+          headers['X-Engine-Secret'] = secret
+        }
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             text: targetText,
             slug: targetSlug,

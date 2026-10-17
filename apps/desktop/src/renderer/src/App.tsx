@@ -16,6 +16,7 @@ import { TemplatePickerModal } from './components/TemplatePickerModal'
 import { CommandPalette } from './components/CommandPalette'
 import { ShortcutsModal } from './components/ShortcutsModal'
 import { QuickCaptureModal } from './components/QuickCaptureModal'
+import { OnboardingModal } from './components/OnboardingModal'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus, Zap, Keyboard } from 'lucide-react'
 
@@ -64,11 +65,21 @@ export const App: React.FC = () => {
     message: ''
   })
 
-  // Phase 8-(라) Modals state
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
+
+  // First launch check for Onboarding Wizard
+  useEffect(() => {
+    try {
+      const completed = localStorage.getItem('markflow_onboarding_completed')
+      if (!completed) {
+        setIsOnboardingOpen(true)
+      }
+    } catch {}
+  }, [])
 
   // Global Keyboard Shortcuts Listener
   useEffect(() => {
@@ -707,6 +718,16 @@ export const App: React.FC = () => {
               message: `'${newDoc.title}' 메모가 수집함에 저장되었습니다.`,
               recordId: newDoc.id
             })
+          }}
+        />
+
+        {/* Phase 9: Onboarding Wizard Modal */}
+        <OnboardingModal
+          isOpen={isOnboardingOpen}
+          onClose={() => setIsOnboardingOpen(false)}
+          onOpenSettings={() => {
+            setIsOnboardingOpen(false)
+            setIsSettingsOpen(true)
           }}
         />
       </main>

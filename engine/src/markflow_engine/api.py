@@ -1,6 +1,9 @@
+import importlib.metadata
+import os
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from markflow_engine.converter import convert_document
@@ -11,6 +14,28 @@ app = FastAPI(
     description="Python Sidecar Conversion Engine for MarkFlow",
     version="0.1.0",
 )
+
+# Optional security token passed from Electron main process
+ENGINE_SECRET: Optional[str] = os.environ.get("MARKFLOW_ENGINE_SECRET", None)
+
+
+@app.middleware("http")
+async def verify_engine_secret_middleware(request: Request, call_next):
+    # Allow health check without token
+    if request.url.path == "/health":
+        return await call_next(request)
+
+    # If secret is configured, require valid X-Engine-Secret header
+    if ENGINE_SECRET:
+        req_secret = request.headers.get("X-Engine-Secret")
+        if not req_secret or req_secret != ENGINE_SECRET:
+            return JSONResponse(
+                status_code=403,
+                content={"status": "error", "message": "Unauthorized engine access (Invalid X-Engine-Secret)"},
+            )
+
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,

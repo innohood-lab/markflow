@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { spawn, exec, ChildProcess } from 'child_process'
 import * as net from 'net'
 import * as path from 'path'
+import * as crypto from 'crypto'
 
 export interface EngineStatus {
   state: 'starting' | 'ready' | 'error' | 'stopped'
@@ -14,6 +15,7 @@ export interface EngineStatus {
 export class SidecarManager {
   private childProcess: ChildProcess | null = null
   private port: number | null = null
+  private secret: string | null = null
   private isShuttingDown: boolean = false
   private restartCount: number = 0
   private maxRestarts: number = 1
@@ -29,6 +31,10 @@ export class SidecarManager {
 
   public getStatus(): EngineStatus {
     return { ...this.currentStatus }
+  }
+
+  public getSecret(): string | null {
+    return this.secret
   }
 
   public onStatusChange(listener: (status: EngineStatus) => void): () => void {
@@ -83,6 +89,7 @@ export class SidecarManager {
 
     try {
       this.port = await this.getAvailablePort()
+      this.secret = crypto.randomBytes(32).toString('hex')
       this.setStatus({
         state: 'starting',
         port: this.port,
@@ -133,7 +140,8 @@ export class SidecarManager {
         cwd,
         env: {
           ...process.env,
-          PYTHONUNBUFFERED: '1'
+          PYTHONUNBUFFERED: '1',
+          MARKFLOW_ENGINE_SECRET: this.secret || ''
         },
         shell: process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe']
@@ -308,9 +316,13 @@ export class SidecarManager {
 
     try {
       const url = `http://127.0.0.1:${this.port}/convert`
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (this.secret) {
+        headers['X-Engine-Secret'] = this.secret
+      }
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           file_path: filePath,
           library_dir: libraryDir,

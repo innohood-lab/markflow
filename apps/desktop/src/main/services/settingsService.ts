@@ -41,6 +41,19 @@ export interface MarkFlowSettings {
     enabled: boolean
     target: 'github' | 'obsidian' | 'both'
   }
+  general: {
+    libraryDir?: string
+    language: 'ko' | 'en'
+    theme: 'system' | 'light' | 'dark'
+  }
+  conversion: {
+    defaultProfile: 'balanced' | 'fast' | 'best_quality'
+    concurrency: number
+    llmProvider: 'none' | 'openai' | 'anthropic' | 'gemini' | 'ollama'
+    llmModel: string
+    llmApiKey?: string
+    maskedLlmApiKey?: string
+  }
   cloudDestinations: CloudDestination[]
   customCloudFolders: Array<{ id: string; name: string; path: string }>
   watchFolders: WatchFolderConfig[]
@@ -65,6 +78,19 @@ export const DEFAULT_SETTINGS: MarkFlowSettings = {
   autoExport: {
     enabled: false,
     target: 'both'
+  },
+  general: {
+    libraryDir: '',
+    language: 'ko',
+    theme: 'light'
+  },
+  conversion: {
+    defaultProfile: 'balanced',
+    concurrency: 2,
+    llmProvider: 'none',
+    llmModel: '',
+    llmApiKey: '',
+    maskedLlmApiKey: ''
   },
   cloudDestinations: [],
   customCloudFolders: [],
@@ -144,7 +170,23 @@ export function loadSettings(includeSecret = false): MarkFlowSettings {
   const encryptedPat = parsed.github?.encryptedPat || ''
   const decryptedPat = decryptSecret(encryptedPat)
 
+  const encryptedLlmKey = parsed.conversion?.encryptedLlmKey || ''
+  const decryptedLlmKey = decryptSecret(encryptedLlmKey)
+
   const settings: MarkFlowSettings = {
+    general: {
+      libraryDir: (parsed.general?.libraryDir ?? DEFAULT_SETTINGS.general.libraryDir).trim(),
+      language: parsed.general?.language ?? DEFAULT_SETTINGS.general.language,
+      theme: parsed.general?.theme ?? DEFAULT_SETTINGS.general.theme
+    },
+    conversion: {
+      defaultProfile: parsed.conversion?.defaultProfile ?? DEFAULT_SETTINGS.conversion.defaultProfile,
+      concurrency: parsed.conversion?.concurrency ?? DEFAULT_SETTINGS.conversion.concurrency,
+      llmProvider: parsed.conversion?.llmProvider ?? DEFAULT_SETTINGS.conversion.llmProvider,
+      llmModel: (parsed.conversion?.llmModel ?? DEFAULT_SETTINGS.conversion.llmModel).trim(),
+      llmApiKey: includeSecret ? decryptedLlmKey : undefined,
+      maskedLlmApiKey: maskPat(decryptedLlmKey)
+    },
     github: {
       enabled: parsed.github?.enabled ?? DEFAULT_SETTINGS.github.enabled,
       owner: (parsed.github?.owner ?? DEFAULT_SETTINGS.github.owner).trim(),
@@ -175,16 +217,36 @@ export function loadSettings(includeSecret = false): MarkFlowSettings {
 /**
  * Save settings to SQLite DB, encrypting sensitive fields.
  */
-export function saveSettings(updates: Partial<MarkFlowSettings> & { githubPat?: string }): MarkFlowSettings {
+export function saveSettings(
+  updates: Partial<MarkFlowSettings> & { githubPat?: string; llmApiKey?: string }
+): MarkFlowSettings {
   const current = loadSettings(true)
 
   let patToSave = current.github.pat || ''
   if (updates.githubPat !== undefined) {
-    // If user provided a new PAT (not masked)
     patToSave = updates.githubPat.trim()
   }
 
+  let llmKeyToSave = current.conversion.llmApiKey || ''
+  if (updates.llmApiKey !== undefined) {
+    llmKeyToSave = updates.llmApiKey.trim()
+  } else if (updates.conversion?.llmApiKey !== undefined) {
+    llmKeyToSave = updates.conversion.llmApiKey.trim()
+  }
+
   const merged = {
+    general: {
+      libraryDir: (updates.general?.libraryDir ?? current.general.libraryDir ?? '').trim(),
+      language: updates.general?.language ?? current.general.language,
+      theme: updates.general?.theme ?? current.general.theme
+    },
+    conversion: {
+      defaultProfile: updates.conversion?.defaultProfile ?? current.conversion.defaultProfile,
+      concurrency: updates.conversion?.concurrency ?? current.conversion.concurrency,
+      llmProvider: updates.conversion?.llmProvider ?? current.conversion.llmProvider,
+      llmModel: (updates.conversion?.llmModel ?? current.conversion.llmModel).trim(),
+      encryptedLlmKey: encryptSecret(llmKeyToSave)
+    },
     github: {
       enabled: updates.github?.enabled ?? current.github.enabled,
       owner: (updates.github?.owner ?? current.github.owner).trim(),

@@ -59,6 +59,7 @@ import {
   createDocumentFromTemplate,
   quickCaptureNote
 } from './services/templateService'
+import { logger } from './services/loggerService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -66,6 +67,12 @@ const watchFolderService = new WatchFolderService(5000)
 const libraryWatcher = new LibraryWatcher()
 
 function getLibraryDir(): string {
+  try {
+    const settings = loadSettings(false)
+    if (settings.general?.libraryDir && fs.existsSync(settings.general.libraryDir)) {
+      return settings.general.libraryDir
+    }
+  } catch {}
   const home = app.getPath('documents')
   const dir = join(home, 'MarkFlow', 'Library')
   if (!fs.existsSync(dir)) {
@@ -440,6 +447,18 @@ ipcMain.handle('settings:pick-obsidian-vault', async () => {
   }
 })
 
+ipcMain.handle('settings:pick-library-folder', async () => {
+  if (!mainWindow) return { canceled: true }
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'MarkFlow 라이브러리 저장 폴더 선택',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+  return { canceled: false, path: result.filePaths[0] }
+})
+
 // IPC Handlers: Export
 ipcMain.handle(
   'export:documents',
@@ -649,7 +668,23 @@ ipcMain.handle('quick-capture:save', (_event, title: string, body: string, tags?
   return quickCaptureNote(getLibraryDir(), title, body, tags)
 })
 
+// IPC Handlers: Phase 9 Security & Settings & Logs
+ipcMain.handle('logger:open-folder', async () => {
+  return await logger.openLogFolder()
+})
+
+ipcMain.handle('logger:clean-old', (_event, days?: number) => {
+  return logger.cleanOldLogs(days || 7)
+})
+
 app.whenReady().then(async () => {
+  try {
+    logger.cleanOldLogs(7)
+    logger.info('MarkFlow application initialized')
+  } catch (err) {
+    console.warn('[Main] Failed to clean old logs:', err)
+  }
+
   createWindow()
 
   // Start sidecar in background

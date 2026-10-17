@@ -90,6 +90,7 @@ export interface MarkFlowApi {
     path?: string
     validation?: { valid: boolean; message: string }
   }>
+  pickLibraryFolder: () => Promise<{ canceled: boolean; path?: string }>
   exportDocuments: (params: {
     targets: 'github' | 'obsidian' | 'both'
     itemIds: number[]
@@ -173,6 +174,9 @@ export interface MarkFlowApi {
   saveTemplate: (template: any) => Promise<any[]>
   createDocumentFromTemplate: (templateId: string, customTitle?: string) => Promise<any>
   quickCaptureNote: (title: string, body: string, tags?: string[]) => Promise<any>
+
+  // Phase 9: Settings & Logs
+  openLogFolder: () => Promise<string>
 }
 
 const api: MarkFlowApi = {
@@ -210,6 +214,7 @@ const api: MarkFlowApi = {
   saveSettings: (updates: any) => ipcRenderer.invoke('settings:save', updates),
   testGitHubConnection: (params) => ipcRenderer.invoke('settings:test-github', params),
   pickObsidianVault: () => ipcRenderer.invoke('settings:pick-obsidian-vault'),
+  pickLibraryFolder: () => ipcRenderer.invoke('settings:pick-library-folder'),
   exportDocuments: (params) => ipcRenderer.invoke('export:documents', params),
   detectCloudProviders: () => ipcRenderer.invoke('cloud:detect-providers'),
   listCloudFiles: (folderPath: string) => ipcRenderer.invoke('cloud:list-files', folderPath),
@@ -270,7 +275,10 @@ const api: MarkFlowApi = {
   createDocumentFromTemplate: (templateId, customTitle) =>
     ipcRenderer.invoke('template:create-doc', templateId, customTitle),
   quickCaptureNote: (title, body, tags) =>
-    ipcRenderer.invoke('quick-capture:save', title, body, tags)
+    ipcRenderer.invoke('quick-capture:save', title, body, tags),
+
+  // Phase 9: Settings & Logs
+  openLogFolder: () => ipcRenderer.invoke('logger:open-folder')
 }
 
 try {
