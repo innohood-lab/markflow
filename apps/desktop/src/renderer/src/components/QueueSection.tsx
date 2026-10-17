@@ -14,21 +14,25 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Cloud,
+  Laptop
 } from 'lucide-react'
+import { CloudFileBrowser } from './CloudFileBrowser'
 
 export interface QueueItem {
   id: string
   path: string
   name: string
   size: number
+  sourceLocation?: string
   status: 'pending' | 'converting' | 'done' | 'failed' | 'unsupported'
   errorMessage?: string
 }
 
 interface QueueSectionProps {
   queue: QueueItem[]
-  onAddFiles: (files: { path: string; name: string; size: number }[]) => void
+  onAddFiles: (files: { path: string; name: string; size: number; sourceLocation?: string }[]) => void
   onRemoveItem: (id: string) => void
   onClearQueue: () => void
   onConvertAll: () => void
@@ -54,6 +58,7 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
   onProfileChange
 }) => {
   const [isDragOver, setIsDragOver] = useState(false)
+  const [sourceMode, setSourceMode] = useState<'local' | 'cloud'>('local')
   const dropRef = useRef<HTMLDivElement>(null)
 
   // Drag and drop event handlers
@@ -164,31 +169,63 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
         </div>
       </div>
 
-      {/* Big Drag and Drop Target Area */}
-      <div className="p-4 shrink-0">
-        <div
-          ref={dropRef}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={handleOpenFileDialog}
-          className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-fast ${
-            isDragOver
-              ? 'border-primary bg-primary/5 scale-[0.99]'
-              : 'border-border/80 hover:border-primary/50 hover:bg-muted/40 bg-card'
+      {/* Source Switcher: Local PC vs Cloud Storage */}
+      <div className="flex px-4 pt-2.5 gap-1 shrink-0">
+        <button
+          onClick={() => setSourceMode('local')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+            sourceMode === 'local'
+              ? 'bg-primary text-primary-foreground shadow-subtle'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2 shadow-subtle">
-            <UploadCloud className="w-5 h-5" />
-          </div>
-          <p className="text-xs font-semibold text-foreground">
-            파일 또는 폴더를 여기에 놓으세요
-          </p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            내 PC 파일 드래그 · 클릭하여 탐색기에서 선택 (폴더 포함)
-          </p>
-        </div>
+          <Laptop size={13} />
+          <span>내 PC</span>
+        </button>
+        <button
+          onClick={() => setSourceMode('cloud')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+            sourceMode === 'cloud'
+              ? 'bg-primary text-primary-foreground shadow-subtle'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          }`}
+        >
+          <Cloud size={13} />
+          <span>클라우드 저장소</span>
+        </button>
       </div>
+
+      {/* Source Area: Drag & Drop vs Cloud Browser */}
+      {sourceMode === 'local' ? (
+        <div className="p-4 shrink-0">
+          <div
+            ref={dropRef}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={handleOpenFileDialog}
+            className={`flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-fast ${
+              isDragOver
+                ? 'border-primary bg-primary/5 scale-[0.99]'
+                : 'border-border/80 hover:border-primary/50 hover:bg-muted/40 bg-card'
+            }`}
+          >
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2 shadow-subtle">
+              <UploadCloud className="w-5 h-5" />
+            </div>
+            <p className="text-xs font-semibold text-foreground">
+              파일 또는 폴더를 여기에 놓으세요
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              내 PC 파일 드래그 · 클릭하여 탐색기에서 선택 (폴더 포함)
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 h-72 shrink-0">
+          <CloudFileBrowser onAddFiles={onAddFiles} />
+        </div>
+      )}
 
       {/* Queue List */}
       <div className="flex-1 overflow-y-auto px-4 space-y-1.5">

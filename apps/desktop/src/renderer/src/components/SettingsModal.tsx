@@ -10,7 +10,12 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  Cloud,
+  HardDrive,
+  Plus,
+  Trash2,
+  FolderPlus
 } from 'lucide-react'
 
 interface SettingsModalProps {
@@ -19,12 +24,12 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'github' | 'obsidian' | 'auto'>('github')
+  const [activeTab, setActiveTab] = useState<'github' | 'obsidian' | 'cloud' | 'auto'>('github')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  // Settings state
+  // GitHub Settings
   const [githubEnabled, setGithubEnabled] = useState(true)
   const [owner, setOwner] = useState('innohood-lab')
   const [repo, setRepo] = useState('LLM-wiki')
@@ -38,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [testing, setTesting] = useState(false)
   const [showPatHelp, setShowPatHelp] = useState(false)
 
-  // Obsidian state
+  // Obsidian Settings
   const [obsidianEnabled, setObsidianEnabled] = useState(true)
   const [vaultPath, setVaultPath] = useState('')
   const [inboxFolder, setInboxFolder] = useState('00_Inbox/MarkFlow')
@@ -47,7 +52,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [vaultValid, setVaultValid] = useState<boolean | null>(null)
   const [vaultValidationMsg, setVaultValidationMsg] = useState('')
 
-  // Auto export state
+  // Cloud Destinations & Watch Folders
+  const [cloudDestinations, setCloudDestinations] = useState<any[]>([])
+  const [watchFolders, setWatchFolders] = useState<any[]>([])
+  const [detectedCloudAccounts, setDetectedCloudAccounts] = useState<any[]>([])
+
+  // New Destination Form
+  const [newDestName, setNewDestName] = useState('')
+  const [newDestPath, setNewDestPath] = useState('')
+  const [newDestProvider, setNewDestProvider] = useState('gdrive')
+  const [newDestRule, setNewDestRule] = useState<'flat' | 'date'>('flat')
+  const [newDestAutoSave, setNewDestAutoSave] = useState(false)
+
+  // Auto Export
   const [autoExportEnabled, setAutoExportEnabled] = useState(false)
   const [autoExportTarget, setAutoExportTarget] = useState<'github' | 'obsidian' | 'both'>('both')
 
@@ -74,14 +91,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         setInboxFolder(s.obsidian?.inboxFolder || '00_Inbox/MarkFlow')
         setAttachmentsFolder(s.obsidian?.attachmentsFolder || 'attachments/MarkFlow')
 
+        setCloudDestinations(s.cloudDestinations || [])
+        setWatchFolders(s.watchFolders || [])
+
         setAutoExportEnabled(s.autoExport?.enabled ?? false)
         setAutoExportTarget(s.autoExport?.target || 'both')
 
         if (s.obsidian?.vaultPath) {
-          // Verify initial vault
-          // We can check validation
           setVaultValid(true)
         }
+
+        // Fetch detected cloud sync folders
+        const clouds = await window.markflowApi.detectCloudProviders()
+        setDetectedCloudAccounts(clouds || [])
       } catch (err) {
         console.error('Failed to load settings:', err)
       } finally {
@@ -143,6 +165,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   }
 
+  const handlePickDestFolder = async () => {
+    try {
+      const res = await window.markflowApi.pickCloudFolder()
+      if (!res.canceled && res.path) {
+        setNewDestPath(res.path)
+        if (!newDestName) {
+          setNewDestName(res.path.split(/[\\/]/).pop() || '클라우드 저장소')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to pick destination folder:', err)
+    }
+  }
+
+  const handleAddDestination = () => {
+    if (!newDestPath) return
+    const id = `dest-${Date.now()}`
+    const newDest = {
+      id,
+      provider: newDestProvider,
+      name: newDestName || '클라우드 저장 대상',
+      targetPath: newDestPath,
+      folderRule: newDestRule,
+      autoSave: newDestAutoSave
+    }
+    setCloudDestinations((prev) => [...prev, newDest])
+    setNewDestName('')
+    setNewDestPath('')
+  }
+
+  const handleRemoveDestination = (id: string) => {
+    setCloudDestinations((prev) => prev.filter((d) => d.id !== id))
+  }
+
+  const handlePickWatchFolder = async () => {
+    try {
+      const res = await window.markflowApi.pickCloudFolder()
+      if (!res.canceled && res.path) {
+        const id = `watch-${Date.now()}`
+        const name = res.path.split(/[\\/]/).pop() || '감시 폴더'
+        setWatchFolders((prev) => [...prev, { id, name, path: res.path, enabled: true }])
+      }
+    } catch (err) {
+      console.error('Failed to pick watch folder:', err)
+    }
+  }
+
+  const handleToggleWatchFolder = (id: string) => {
+    setWatchFolders((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w))
+    )
+  }
+
+  const handleRemoveWatchFolder = (id: string) => {
+    setWatchFolders((prev) => prev.filter((w) => w.id !== id))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -164,8 +243,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         autoExport: {
           enabled: autoExportEnabled,
           target: autoExportTarget
-        }
+        },
+        cloudDestinations,
+        watchFolders
       })
+
+      // Reload watch folder service with updated paths
+      await window.markflowApi.reloadWatchFolders?.()
+
       setSaveSuccess(true)
       setTimeout(() => {
         setSaveSuccess(false)
@@ -187,8 +272,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">내보내기 설정</h2>
-            <span className="text-xs text-stone-400 font-normal">GitHub LLM-wiki & Obsidian</span>
+            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">환경 및 지식 저장소 설정</h2>
+            <span className="text-xs text-stone-400 font-normal">GitHub, Obsidian, Cloud</span>
           </div>
           <button
             onClick={onClose}
@@ -199,10 +284,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex px-6 pt-3 border-b border-stone-100 dark:border-stone-800 gap-2 bg-stone-50/50 dark:bg-stone-900/50">
+        <div className="flex px-6 pt-3 border-b border-stone-100 dark:border-stone-800 gap-2 bg-stone-50/50 dark:bg-stone-900/50 overflow-x-auto">
           <button
             onClick={() => setActiveTab('github')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors shrink-0 ${
               activeTab === 'github'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-stone-900 font-semibold'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -213,7 +298,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           </button>
           <button
             onClick={() => setActiveTab('obsidian')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors shrink-0 ${
               activeTab === 'obsidian'
                 ? 'border-purple-600 text-purple-600 dark:text-purple-400 bg-white dark:bg-stone-900 font-semibold'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -223,8 +308,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             Obsidian 보관함
           </button>
           <button
+            onClick={() => setActiveTab('cloud')}
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors shrink-0 ${
+              activeTab === 'cloud'
+                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-stone-900 font-semibold'
+                : 'border-transparent text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            <Cloud size={15} />
+            클라우드 저장소 & 감시
+          </button>
+          <button
             onClick={() => setActiveTab('auto')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors shrink-0 ${
               activeTab === 'auto'
                 ? 'border-amber-600 text-amber-600 dark:text-amber-400 bg-white dark:bg-stone-900 font-semibold'
                 : 'border-transparent text-stone-500 hover:text-stone-800'
@@ -401,7 +497,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </div>
                   <ol className="list-decimal pl-4 space-y-1 text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed">
                     <li>GitHub 프로필 &gt; <strong>Settings &gt; Developer settings &gt; Personal access tokens &gt; Fine-grained tokens</strong> 이동</li>
-                    <li><strong>Generate new token</strong> 클릭 후 토큰 이름(예: <code>MarkFlow-Desktop</code>) 및 만료 기간 설정</li>
+                    <li><strong>Generate new token</strong> 클릭 후 토큰 이름 및 만료 기간 설정</li>
                     <li><strong>Repository access:</strong> <code>Only select repositories</code> 선택 후 <code>{repo || 'LLM-wiki'}</code> 지정</li>
                     <li><strong>Permissions &gt; Repository permissions:</strong> <code>Contents</code> 항목을 <strong>Access: Read and write</strong>로 설정 후 토큰 생성</li>
                   </ol>
@@ -459,7 +555,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </label>
               </div>
 
-              {/* Vault Path Picker */}
               <div>
                 <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                   Obsidian 볼트 폴더 (Vault Directory)
@@ -506,7 +601,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 )}
               </div>
 
-              {/* Subfolder configurations */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
@@ -519,7 +613,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     placeholder="00_Inbox/MarkFlow"
                     className="w-full px-3 py-2 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono"
                   />
-                  <span className="text-[10px] text-stone-400 mt-0.5 block">볼트 내 마크다운이 저장될 폴더</span>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
@@ -532,12 +625,194 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     placeholder="attachments/MarkFlow"
                     className="w-full px-3 py-2 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono"
                   />
-                  <span className="text-[10px] text-stone-400 mt-0.5 block">문서별 이미지가 저장될 폴더</span>
                 </div>
               </div>
             </div>
+          ) : activeTab === 'cloud' ? (
+            /* Tab 3: Cloud & Watch */
+            <div className="space-y-6 animate-fade-in text-xs">
+              {/* 1. Detected Cloud Folders */}
+              <div>
+                <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200 mb-1">
+                  감지된 클라우드 동기화 폴더
+                </h3>
+                <p className="text-[11px] text-stone-500 mb-3">
+                  PC에 설치된 클라우드 앱의 동기화 폴더를 자동으로 감지한 목록입니다.
+                </p>
+
+                {detectedCloudAccounts.length === 0 ? (
+                  <div className="p-3 bg-stone-50 dark:bg-stone-800/50 rounded-xl text-stone-400 text-center">
+                    감지된 클라우드 폴더가 없습니다.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {detectedCloudAccounts.map((c) => (
+                      <div
+                        key={c.id}
+                        className="p-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/40 flex items-start gap-2"
+                      >
+                        <HardDrive size={15} className="mt-0.5 text-emerald-600 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-stone-800 dark:text-stone-200 truncate">{c.name}</div>
+                          <div className="text-[10px] text-stone-400 truncate" title={c.path}>{c.path}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Destination Manager */}
+              <div className="pt-2 border-t border-stone-100 dark:border-stone-800">
+                <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200 mb-1">
+                  추가 저장 대상 폴더 (Destinations)
+                </h3>
+                <p className="text-[11px] text-stone-500 mb-3">
+                  변환 완료된 마크다운을 자동으로 백업하거나 동기화할 클라우드 폴더를 지정합니다.
+                </p>
+
+                {/* Destination list */}
+                {cloudDestinations.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {cloudDestinations.map((d) => (
+                      <div
+                        key={d.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/50"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="font-semibold text-stone-800 dark:text-stone-200">{d.name}</div>
+                          <div className="text-[10px] text-stone-400 font-mono truncate" title={d.targetPath}>
+                            {d.targetPath} (규칙: {d.folderRule === 'date' ? 'MarkFlow/YYYY/MM/' : 'MarkFlow/'})
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveDestination(d.id)}
+                          className="p-1 text-stone-400 hover:text-rose-600 transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new destination */}
+                <div className="p-3 bg-stone-50 dark:bg-stone-800/40 rounded-xl border border-stone-200/80 dark:border-stone-700/80 space-y-2.5">
+                  <div className="font-semibold text-[11px] text-stone-700 dark:text-stone-300">
+                    새 저장 대상 등록
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={newDestName}
+                      onChange={(e) => setNewDestName(e.target.value)}
+                      placeholder="대상 이름 (예: Google Drive 아카이브)"
+                      className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 text-xs"
+                    />
+                    <select
+                      value={newDestRule}
+                      onChange={(e) => setNewDestRule(e.target.value as any)}
+                      className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 text-xs"
+                    >
+                      <option value="flat">MarkFlow/ (기본 폴더)</option>
+                      <option value="date">MarkFlow/YYYY/MM/ (날짜별 폴더)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newDestPath}
+                      onChange={(e) => setNewDestPath(e.target.value)}
+                      placeholder="저장할 폴더 경로..."
+                      className="flex-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePickDestFolder}
+                      className="px-3 py-1.5 rounded-lg bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-700 dark:text-stone-200 font-medium"
+                    >
+                      폴더 찾기
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!newDestPath}
+                      onClick={handleAddDestination}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50"
+                    >
+                      추가
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Watch Folder Manager */}
+              <div className="pt-2 border-t border-stone-100 dark:border-stone-800">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">
+                      수집 감시 폴더 (Watch Folders)
+                    </h3>
+                    <p className="text-[11px] text-stone-500">
+                      지정된 폴더에 새 문서가 들어오면 5초간 안정화 후 자동으로 수집·변환합니다.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handlePickWatchFolder}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 text-stone-700 dark:text-stone-200 text-xs font-medium"
+                  >
+                    <FolderPlus size={13} />
+                    감시 폴더 추가
+                  </button>
+                </div>
+
+                {watchFolders.length === 0 ? (
+                  <div className="p-3 bg-stone-50 dark:bg-stone-800/40 rounded-xl text-stone-400 text-center text-[11px] mt-2">
+                    등록된 감시 폴더가 없습니다.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 mt-2">
+                    {watchFolders.map((w) => (
+                      <div
+                        key={w.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/50"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <div className="font-semibold text-stone-800 dark:text-stone-200 flex items-center gap-2">
+                            <span>{w.name}</span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold ${
+                              w.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-stone-200 text-stone-500'
+                            }`}>
+                              {w.enabled ? '감시 중' : '일시정지'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-stone-400 font-mono truncate" title={w.path}>{w.path}</div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={w.enabled}
+                              onChange={() => handleToggleWatchFolder(w.id)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-8 h-4 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                          <button
+                            onClick={() => handleRemoveWatchFolder(w.id)}
+                            className="p-1 text-stone-400 hover:text-rose-600 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
-            /* Tab 3: Auto Export */
+            /* Tab 4: Auto Export */
             <div className="space-y-5 animate-fade-in">
               <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
                 <div>

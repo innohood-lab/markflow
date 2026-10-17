@@ -30,7 +30,13 @@ export interface MarkFlowApi {
   getEngineStatus: () => Promise<EngineStatus>
   restartEngine: () => Promise<EngineStatus>
   onEngineStatusChange: (callback: (status: EngineStatus) => void) => () => void
-  convertDocument: (filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) => Promise<any>
+  convertDocument: (
+    filePath: string,
+    libraryDir?: string,
+    profile?: string,
+    llmConfig?: any,
+    sourceLocation?: string
+  ) => Promise<any>
   selectFilesOrFolders: () => Promise<{ path: string; name: string; size: number }[]>
   getHistory: (params?: { search?: string; sort?: 'latest' | 'name'; reviewOnly?: boolean }) => Promise<ConversionRecord[]>
   getReviewCount: () => Promise<number>
@@ -77,6 +83,12 @@ export interface MarkFlowApi {
     githubResult?: any
     obsidianResult?: any
   }>
+  detectCloudProviders: () => Promise<any[]>
+  listCloudFiles: (folderPath: string) => Promise<any[]>
+  pickCloudFolder: () => Promise<{ canceled: boolean; path?: string }>
+  exportToCloudDestination: (params: { destinationId: string; itemIds: number[] }) => Promise<any>
+  reloadWatchFolders: () => Promise<{ success: boolean; count: number }>
+  onWatchFileDetected: (callback: (fileEvent: any) => void) => () => void
 }
 
 const api: MarkFlowApi = {
@@ -89,8 +101,13 @@ const api: MarkFlowApi = {
       ipcRenderer.removeListener('engine:status-changed', subscription)
     }
   },
-  convertDocument: (filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) =>
-    ipcRenderer.invoke('engine:convert', filePath, libraryDir, profile, llmConfig),
+  convertDocument: (
+    filePath: string,
+    libraryDir?: string,
+    profile?: string,
+    llmConfig?: any,
+    sourceLocation?: string
+  ) => ipcRenderer.invoke('engine:convert', filePath, libraryDir, profile, llmConfig, sourceLocation),
   selectFilesOrFolders: () => ipcRenderer.invoke('dialog:open-files'),
   getHistory: (params) => ipcRenderer.invoke('db:get-history', params),
   getReviewCount: () => ipcRenderer.invoke('db:get-review-count'),
@@ -109,7 +126,19 @@ const api: MarkFlowApi = {
   saveSettings: (updates: any) => ipcRenderer.invoke('settings:save', updates),
   testGitHubConnection: (params) => ipcRenderer.invoke('settings:test-github', params),
   pickObsidianVault: () => ipcRenderer.invoke('settings:pick-obsidian-vault'),
-  exportDocuments: (params) => ipcRenderer.invoke('export:documents', params)
+  exportDocuments: (params) => ipcRenderer.invoke('export:documents', params),
+  detectCloudProviders: () => ipcRenderer.invoke('cloud:detect-providers'),
+  listCloudFiles: (folderPath: string) => ipcRenderer.invoke('cloud:list-files', folderPath),
+  pickCloudFolder: () => ipcRenderer.invoke('cloud:pick-folder'),
+  exportToCloudDestination: (params) => ipcRenderer.invoke('cloud:export-destination', params),
+  reloadWatchFolders: () => ipcRenderer.invoke('watch:reload'),
+  onWatchFileDetected: (callback: (fileEvent: any) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, event: any) => callback(event)
+    ipcRenderer.on('watch:file-detected', subscription)
+    return () => {
+      ipcRenderer.removeListener('watch:file-detected', subscription)
+    }
+  }
 }
 
 try {

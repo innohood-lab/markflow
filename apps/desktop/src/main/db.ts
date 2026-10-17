@@ -14,6 +14,8 @@ export interface ConversionRecord {
   source_file: string
   source_path?: string
   source_type: string
+  source_location?: string
+  file_hash?: string
   file_size?: number
   converted_at: string
   library_path: string
@@ -52,6 +54,8 @@ export function getDatabase(): Database.Database {
       source_file TEXT NOT NULL,
       source_path TEXT,
       source_type TEXT NOT NULL,
+      source_location TEXT,
+      file_hash TEXT,
       file_size INTEGER DEFAULT 0,
       converted_at TEXT NOT NULL,
       library_path TEXT NOT NULL,
@@ -65,6 +69,7 @@ export function getDatabase(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_conversions_converted_at ON conversions(converted_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);
+    CREATE INDEX IF NOT EXISTS idx_conversions_hash ON conversions(file_hash);
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -86,9 +91,13 @@ export function getDatabase(): Database.Database {
 
   try {
     db.exec(`ALTER TABLE conversions ADD COLUMN profile TEXT DEFAULT 'balanced';`)
-  } catch {
-    // Column already exists
-  }
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE conversions ADD COLUMN source_location TEXT;`)
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE conversions ADD COLUMN file_hash TEXT;`)
+  } catch {}
 
   return db
 }
@@ -97,10 +106,10 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
   const database = getDatabase()
   const stmt = database.prepare(`
     INSERT INTO conversions (
-      slug, title, source_file, source_path, source_type, file_size,
+      slug, title, source_file, source_path, source_type, source_location, file_hash, file_size,
       converted_at, library_path, status, quality_score, profile, markdown, exported_json
     ) VALUES (
-      @slug, @title, @source_file, @source_path, @source_type, @file_size,
+      @slug, @title, @source_file, @source_path, @source_type, @source_location, @file_hash, @file_size,
       @converted_at, @library_path, @status, @quality_score, @profile, @markdown, @exported_json
     )
     ON CONFLICT(slug) DO UPDATE SET
@@ -108,6 +117,8 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
       source_file = excluded.source_file,
       source_path = excluded.source_path,
       source_type = excluded.source_type,
+      source_location = excluded.source_location,
+      file_hash = excluded.file_hash,
       file_size = excluded.file_size,
       converted_at = excluded.converted_at,
       library_path = excluded.library_path,
@@ -124,6 +135,8 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
     source_file: record.source_file,
     source_path: record.source_path || '',
     source_type: record.source_type,
+    source_location: record.source_location || '',
+    file_hash: record.file_hash || '',
     file_size: record.file_size || 0,
     converted_at: record.converted_at,
     library_path: record.library_path,
@@ -135,6 +148,13 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
   })
 
   return { ...record, id: Number(info.lastInsertRowid) }
+}
+
+export function findConversionByHash(hash: string): ConversionRecord | null {
+  if (!hash) return null
+  const database = getDatabase()
+  const stmt = database.prepare('SELECT * FROM conversions WHERE file_hash = ? AND is_deleted = 0 LIMIT 1')
+  return (stmt.get(hash) as ConversionRecord) || null
 }
 
 export function getConversions(params?: { search?: string; sort?: 'latest' | 'name'; reviewOnly?: boolean }): ConversionRecord[] {

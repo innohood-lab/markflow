@@ -172,8 +172,21 @@ export const App: React.FC = () => {
         setEngineStatus(status)
       })
 
+      const unsubscribeWatch = window.markflowApi.onWatchFileDetected?.((event: any) => {
+        console.log('[App] Auto watch file detected:', event)
+        handleAddFiles([{
+          path: event.filePath,
+          name: event.fileName,
+          size: event.fileSize,
+          sourceLocation: event.sourceLocation
+        }])
+      })
+
       loadHistory()
-      return () => unsubscribe()
+      return () => {
+        unsubscribe()
+        if (unsubscribeWatch) unsubscribeWatch()
+      }
     } else {
       setEngineStatus({
         state: 'ready',
@@ -195,12 +208,13 @@ export const App: React.FC = () => {
   }
 
   // Add files to queue
-  const handleAddFiles = (files: { path: string; name: string; size: number }[]) => {
+  const handleAddFiles = (files: { path: string; name: string; size: number; sourceLocation?: string }[]) => {
     const newItems: QueueItem[] = files.map((f) => ({
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       path: f.path,
       name: f.name,
       size: f.size,
+      sourceLocation: f.sourceLocation,
       status: 'pending'
     }))
 
@@ -228,7 +242,13 @@ export const App: React.FC = () => {
     setActiveConversions((c) => c + 1)
 
     try {
-      const res = await window.markflowApi.convertDocument(item.path, undefined, profile)
+      const res = await window.markflowApi.convertDocument(
+        item.path,
+        undefined,
+        profile,
+        undefined,
+        item.sourceLocation
+      )
 
       if (res.status === 'success') {
         setQueue((prev) =>

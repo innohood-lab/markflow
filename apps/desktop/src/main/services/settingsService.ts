@@ -3,7 +3,23 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { Octokit } from '@octokit/rest'
-import { getSetting, setSetting } from '../db'
+import { getSetting, setSetting, ConversionRecord, updateConversion, logExport } from '../db'
+
+export interface CloudDestination {
+  id: string
+  provider: string
+  name: string
+  targetPath: string
+  folderRule: 'flat' | 'date'
+  autoSave: boolean
+}
+
+export interface WatchFolderConfig {
+  id: string
+  name: string
+  path: string
+  enabled: boolean
+}
 
 export interface MarkFlowSettings {
   github: {
@@ -25,6 +41,9 @@ export interface MarkFlowSettings {
     enabled: boolean
     target: 'github' | 'obsidian' | 'both'
   }
+  cloudDestinations: CloudDestination[]
+  customCloudFolders: Array<{ id: string; name: string; path: string }>
+  watchFolders: WatchFolderConfig[]
 }
 
 export const DEFAULT_SETTINGS: MarkFlowSettings = {
@@ -46,7 +65,10 @@ export const DEFAULT_SETTINGS: MarkFlowSettings = {
   autoExport: {
     enabled: false,
     target: 'both'
-  }
+  },
+  cloudDestinations: [],
+  customCloudFolders: [],
+  watchFolders: []
 }
 
 /**
@@ -141,7 +163,10 @@ export function loadSettings(includeSecret = false): MarkFlowSettings {
     autoExport: {
       enabled: parsed.autoExport?.enabled ?? DEFAULT_SETTINGS.autoExport.enabled,
       target: parsed.autoExport?.target ?? DEFAULT_SETTINGS.autoExport.target
-    }
+    },
+    cloudDestinations: parsed.cloudDestinations || [],
+    customCloudFolders: parsed.customCloudFolders || [],
+    watchFolders: parsed.watchFolders || []
   }
 
   return settings
@@ -177,7 +202,10 @@ export function saveSettings(updates: Partial<MarkFlowSettings> & { githubPat?: 
     autoExport: {
       enabled: updates.autoExport?.enabled ?? current.autoExport.enabled,
       target: updates.autoExport?.target ?? current.autoExport.target
-    }
+    },
+    cloudDestinations: updates.cloudDestinations ?? current.cloudDestinations,
+    customCloudFolders: updates.customCloudFolders ?? current.customCloudFolders,
+    watchFolders: updates.watchFolders ?? current.watchFolders
   }
 
   setSetting('markflow_settings', JSON.stringify(merged))
@@ -265,5 +293,99 @@ export async function testGitHubConnection(
       }
     }
     return { success: false, message: `연결 실패: ${err.message || '알 수 없는 네트워크 오류'}` }
+  }
+}
+
+/**
+ * Export multiple documents to a configured local/cloud sync folder destination.
+ */
+export async function exportDocumentsToCloudDestination(
+  documents: ConversionRecord[],
+  destination: CloudDestination
+): Promise<{ success: boolean; exportedCount: number; message: string; targetPaths: string[] }> {
+  if (!documents || documents.length === 0) {
+    return { success: false, exportedCount: 0, targetPaths: [], message: '내보낼 문서가 없습니다.' }
+  }
+  if (!destination.targetPath || !fs.existsSync(destination.targetPath)) {
+    return {
+      success: false,
+      exportedCount: 0,
+      targetPaths: [],
+      message: `저장 대상 폴더를 찾을 수 없습니다: ${destination.targetPath}`
+    }
+  }
+
+  const now = new Date()
+  const year = String(now.getFullYear())
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const targetPaths: string[] = []
+
+  try {
+    for (const doc of documents) {
+      if (!fs.existsSync(doc.library_path)) continue
+
+      const content = fs.readFileSync(doc.library_path, 'utf-8')
+      let baseDest = destination.targetPath
+      if (destination.folderRule === 'date') {
+        baseDest = path.join(destination.targetPath, 'MarkFlow', year, month)
+      } else {
+        baseDest = path.join(destination.targetPath, 'MarkFlow')
+      }
+      fs.mkdirSync(baseDest, { recursive: true })
+
+      // Copy assets if they exist
+      const sourceAssets = path.join(path.dirname(doc.library_path), 'assets', doc.slug)
+      const targetAssets = path.join(baseDest, 'assets', doc.slug)
+      if (fs.existsSync(sourceAssets)) {
+        fs.mkdirSync(targetAssets, { recursive: true })
+        const assetFiles = fs.readdirSync(sourceAssets)
+        for (const af of assetFiles) {
+          const srcF = path.join(sourceAssets, af)
+          const dstF = path.join(targetAssets, af)
+          if (fs.statSync(srcF).isFile()) {
+            fs.copyFileSync(srcF, dstF)
+          }
+        }
+      }
+
+      const targetMd = path.join(baseDest, `${doc.slug}.md`)
+      fs.writeFileSync(targetMd, content, 'utf-8')
+      targetPaths.push(targetMd)
+
+      // DB update
+      if (doc.id) {
+        let meta: any = {}
+        try {
+          meta = JSON.parse(doc.exported_json || '{}')
+        } catch {
+          meta = {}
+        }
+        meta[destination.provider] = true
+        meta[destination.id] = true
+        meta[`${destination.provider}_path`] = targetMd
+        meta[`${destination.provider}_exported_at`] = now.toISOString()
+
+        updateConversion(doc.id, {
+          exported_json: JSON.stringify(meta),
+          status: doc.status === 'inbox' || doc.status === 'ready' ? 'exported' : doc.status
+        })
+        logExport(doc.id, (destination.provider as any) || 'local', 'success', targetMd)
+      }
+    }
+
+    return {
+      success: true,
+      exportedCount: targetPaths.length,
+      targetPaths,
+      message: `${targetPaths.length}개 문서가 '${destination.name}' 대상 폴더로 저장되었습니다.`
+    }
+  } catch (err: any) {
+    console.error('[CloudDestination] Export failed:', err)
+    return {
+      success: false,
+      exportedCount: targetPaths.length,
+      targetPaths,
+      message: `저장 실패: ${err.message || '알 수 없는 파일 오류'}`
+    }
   }
 }

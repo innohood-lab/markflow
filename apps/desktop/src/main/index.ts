@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
 import { join, extname } from 'path'
 import * as fs from 'fs'
+import * as crypto from 'crypto'
 import { SidecarManager } from './sidecar'
 import {
   saveConversion,
@@ -16,13 +17,18 @@ import {
   saveSettings,
   testGitHubConnection,
   validateObsidianVault,
-  getDefaultVaultHint
+  getDefaultVaultHint,
+  exportDocumentsToCloudDestination
 } from './services/settingsService'
 import { exportDocumentsToGitHub } from './services/githubExporter'
 import { exportDocumentsToObsidian } from './services/obsidianExporter'
+import { LocalFolderAdapter } from './services/storageAdapter'
+import { detectCloudStorageFolders } from './services/cloudDetector'
+import { WatchFolderService } from './services/watchFolderService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
+const watchFolderService = new WatchFolderService(5000)
 
 const SUPPORTED_EXTS = new Set([
   '.docx',
@@ -122,9 +128,26 @@ ipcMain.handle('engine:restart', async () => {
 
 ipcMain.handle(
   'engine:convert',
-  async (_event, filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) => {
+  async (_event, filePath: string, libraryDir?: string, profile?: string, llmConfig?: any, sourceLocation?: string) => {
+    let fileHash = ''
+    try {
+      if (fs.existsSync(filePath)) {
+        fileHash = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')
+      }
+    } catch {}
+
     const result = await sidecar.convertDocument(filePath, libraryDir, profile || 'balanced', llmConfig)
     if (result.status === 'success') {
+      let finalMarkdown = result.markdown
+      if (sourceLocation && result.library_path && fs.existsSync(result.library_path)) {
+        try {
+          let md = fs.readFileSync(result.library_path, 'utf-8')
+          md = md.replace(/source_location:\s*""/, `source_location: "${sourceLocation}"`)
+          fs.writeFileSync(result.library_path, md, 'utf-8')
+          finalMarkdown = md
+        } catch {}
+      }
+
       // Save to SQLite
       const record = saveConversion({
         slug: result.slug,
@@ -132,13 +155,15 @@ ipcMain.handle(
         source_file: result.source_file,
         source_path: result.source_path,
         source_type: result.source_type,
+        source_location: sourceLocation || '',
+        file_hash: fileHash,
         file_size: result.file_size,
         converted_at: result.converted_at,
         library_path: result.library_path,
         status: result.quality_report?.review_needed ? 'review_needed' : 'inbox',
         quality_score: result.quality_score ?? null,
         profile: result.profile || profile || 'balanced',
-        markdown: result.markdown
+        markdown: finalMarkdown
       })
 
       // Auto-export if enabled in settings
@@ -418,6 +443,59 @@ ipcMain.handle(
   }
 )
 
+// IPC Handlers: Cloud Storage
+ipcMain.handle('cloud:detect-providers', () => {
+  const settings = loadSettings(false)
+  return detectCloudStorageFolders(settings.customCloudFolders || [])
+})
+
+ipcMain.handle('cloud:list-files', async (_event, folderPath: string) => {
+  const adapter = new LocalFolderAdapter('Explorer', folderPath)
+  return await adapter.list(folderPath)
+})
+
+ipcMain.handle('cloud:pick-folder', async () => {
+  if (!mainWindow) return { canceled: true }
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '클라우드 동기화 또는 로컬 폴더 선택',
+    properties: ['openDirectory']
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+  return { canceled: false, path: result.filePaths[0] }
+})
+
+ipcMain.handle(
+  'cloud:export-destination',
+  async (_event, params: { destinationId: string; itemIds: number[] }) => {
+    const settings = loadSettings(false)
+    const dest = settings.cloudDestinations.find((d) => d.id === params.destinationId)
+    if (!dest) {
+      return { success: false, message: '등록된 저장 대상을 찾을 수 없습니다.' }
+    }
+    const docs = params.itemIds
+      .map((id) => getConversionById(id))
+      .filter((d): d is NonNullable<typeof d> => d !== null)
+    return await exportDocumentsToCloudDestination(docs, dest)
+  }
+)
+
+// IPC Handlers: Watch Folder
+ipcMain.handle('watch:reload', () => {
+  const settings = loadSettings(false)
+  const activeWatchPaths = (settings.watchFolders || [])
+    .filter((w) => w.enabled)
+    .map((w) => w.path)
+
+  watchFolderService.start(activeWatchPaths, (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('watch:file-detected', event)
+    }
+  })
+  return { success: true, count: activeWatchPaths.length }
+})
+
 app.whenReady().then(async () => {
   createWindow()
 
@@ -425,6 +503,21 @@ app.whenReady().then(async () => {
   sidecar.start().catch((err) => {
     console.error('[Main] Failed to start sidecar on app ready:', err)
   })
+
+  // Start watch folder service
+  try {
+    const settings = loadSettings(false)
+    const activeWatchPaths = (settings.watchFolders || [])
+      .filter((w) => w.enabled)
+      .map((w) => w.path)
+    watchFolderService.start(activeWatchPaths, (event) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('watch:file-detected', event)
+      }
+    })
+  } catch (err) {
+    console.warn('[Main] Failed to initialize watch folder service:', err)
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
