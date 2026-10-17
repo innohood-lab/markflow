@@ -53,6 +53,12 @@ import {
   getAllHighlights
 } from './services/wikiLinkService'
 import { getRecommendations } from './services/aiRecommendationService'
+import {
+  ensureTemplates,
+  saveTemplate,
+  createDocumentFromTemplate,
+  quickCaptureNote
+} from './services/templateService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -624,6 +630,23 @@ ipcMain.handle('wiki:get-all-highlights', () => {
 // IPC Handlers: Phase 8-(다) AI Recommendations & Duplicate Detection
 ipcMain.handle('ai:get-recommendations', async (_event, text: string, slug?: string) => {
   return await getRecommendations(text, slug, getLibraryDir(), sidecar)
+})
+
+// IPC Handlers: Phase 8-(라) Templates & Quick Capture
+ipcMain.handle('template:get-all', () => {
+  return ensureTemplates(getLibraryDir())
+})
+
+ipcMain.handle('template:save', (_event, template: any) => {
+  return saveTemplate(getLibraryDir(), template)
+})
+
+ipcMain.handle('template:create-doc', (_event, templateId: string, customTitle?: string) => {
+  return createDocumentFromTemplate(getLibraryDir(), templateId, customTitle)
+})
+
+ipcMain.handle('quick-capture:save', (_event, title: string, body: string, tags?: string[]) => {
+  return quickCaptureNote(getLibraryDir(), title, body, tags)
 })
 
 app.whenReady().then(async () => {

@@ -167,6 +167,12 @@ export interface MarkFlowApi {
     duplicateMatch: { slug: string; title: string; score: number } | null
     relatedDocuments: { slug: string; title: string; score: number; snippet: string; groups?: string[] }[]
   }>
+
+  // Phase 8-(라): Templates & Quick Capture
+  getTemplates: () => Promise<any[]>
+  saveTemplate: (template: any) => Promise<any[]>
+  createDocumentFromTemplate: (templateId: string, customTitle?: string) => Promise<any>
+  quickCaptureNote: (title: string, body: string, tags?: string[]) => Promise<any>
 }
 
 const api: MarkFlowApi = {
@@ -256,7 +262,15 @@ const api: MarkFlowApi = {
   getAllHighlights: () => ipcRenderer.invoke('wiki:get-all-highlights'),
 
   // Phase 8-(다): AI Recommendations & Duplicate Detection
-  getAiRecommendations: (text, slug) => ipcRenderer.invoke('ai:get-recommendations', text, slug)
+  getAiRecommendations: (text, slug) => ipcRenderer.invoke('ai:get-recommendations', text, slug),
+
+  // Phase 8-(라): Templates & Quick Capture methods
+  getTemplates: () => ipcRenderer.invoke('template:get-all'),
+  saveTemplate: (template) => ipcRenderer.invoke('template:save', template),
+  createDocumentFromTemplate: (templateId, customTitle) =>
+    ipcRenderer.invoke('template:create-doc', templateId, customTitle),
+  quickCaptureNote: (title, body, tags) =>
+    ipcRenderer.invoke('quick-capture:save', title, body, tags)
 }
 
 try {

@@ -12,8 +12,12 @@ import { BoardView } from './components/board/BoardView'
 import { TodayView } from './components/TodayView'
 import { LogbookView } from './components/LogbookView'
 import { HighlightsView } from './components/HighlightsView'
+import { TemplatePickerModal } from './components/TemplatePickerModal'
+import { CommandPalette } from './components/CommandPalette'
+import { ShortcutsModal } from './components/ShortcutsModal'
+import { QuickCaptureModal } from './components/QuickCaptureModal'
 import { EngineStatus, ConversionRecord } from '../../preload'
-import { Plus } from 'lucide-react'
+import { Plus, Zap, Keyboard } from 'lucide-react'
 
 export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('inbox')
@@ -59,6 +63,62 @@ export const App: React.FC = () => {
     status: 'exporting',
     message: ''
   })
+
+  // Phase 8-(라) Modals state
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false)
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
+  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
+
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey
+      const activeTag = document.activeElement?.tagName.toLowerCase()
+      const isInput = activeTag === 'input' || activeTag === 'textarea'
+
+      // 1. Command Palette: Ctrl/Cmd + K or Ctrl/Cmd + P
+      if (isCmdOrCtrl && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'p')) {
+        e.preventDefault()
+        setIsCommandPaletteOpen((prev) => !prev)
+        return
+      }
+
+      // 2. Quick Capture: Ctrl/Cmd + Shift + Space
+      if (isCmdOrCtrl && e.shiftKey && e.code === 'Space') {
+        e.preventDefault()
+        setIsQuickCaptureOpen(true)
+        return
+      }
+
+      // 3. New Document (Template Picker): Ctrl/Cmd + N
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        setIsTemplatePickerOpen(true)
+        return
+      }
+
+      // 4. View Switcher: Ctrl/Cmd + 1 ~ 6
+      if (isCmdOrCtrl && !e.shiftKey && !e.altKey) {
+        if (e.key === '1') { e.preventDefault(); setCurrentView('inbox'); setDetailViewItem(null); return }
+        if (e.key === '2') { e.preventDefault(); setCurrentView('today'); setDetailViewItem(null); return }
+        if (e.key === '3') { e.preventDefault(); setCurrentView('review'); setDetailViewItem(null); return }
+        if (e.key === '4') { e.preventDefault(); setCurrentView('library'); setDetailViewItem(null); return }
+        if (e.key === '5') { e.preventDefault(); setCurrentView('highlights'); setDetailViewItem(null); return }
+        if (e.key === '6') { e.preventDefault(); setCurrentView('logbook'); setDetailViewItem(null); return }
+      }
+
+      // 5. Shortcuts Cheat Sheet: ? (when not typing in an input)
+      if (e.key === '?' && !isInput) {
+        e.preventDefault()
+        setIsShortcutsOpen((prev) => !prev)
+        return
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Multi-selection handlers
   const handleToggleSelect = (id: number) => {
@@ -541,19 +601,36 @@ export const App: React.FC = () => {
           </>
         )}
 
-        {/* Floating Quick Add (+) Button */}
-        <button
-          onClick={async () => {
-            if (window.markflowApi) {
-              const selected = await window.markflowApi.selectFilesOrFolders()
-              if (selected.length > 0) handleAddFiles(selected)
-            }
-          }}
-          className="absolute bottom-6 right-6 w-11 h-11 rounded-full bg-primary hover:bg-primary-hover text-primary-foreground shadow-floating flex items-center justify-center transition-all duration-fast hover:scale-105 active:scale-95"
-          title="문서 추가 (파일 또는 폴더 선택)"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-        </button>
+        {/* Floating Quick Action Buttons */}
+        <div className="absolute bottom-6 right-6 flex items-center gap-2">
+          {/* Shortcuts Guide Button */}
+          <button
+            onClick={() => setIsShortcutsOpen(true)}
+            className="w-9 h-9 rounded-full bg-card hover:bg-muted border border-border/80 text-muted-foreground hover:text-foreground shadow-subtle flex items-center justify-center transition-all duration-fast hover:scale-105 active:scale-95"
+            title="키보드 단축키 안내 (?)"
+          >
+            <Keyboard className="w-4 h-4" />
+          </button>
+
+          {/* Quick Capture Button */}
+          <button
+            onClick={() => setIsQuickCaptureOpen(true)}
+            className="w-9 h-9 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-subtle flex items-center justify-center transition-all duration-fast hover:scale-105 active:scale-95"
+            title="빠른 캡처 (Ctrl+Shift+Space)"
+          >
+            <Zap className="w-4 h-4" />
+          </button>
+
+          {/* New Document from Template Button */}
+          <button
+            onClick={() => setIsTemplatePickerOpen(true)}
+            className="h-11 px-4 rounded-full bg-primary hover:bg-primary-hover text-primary-foreground shadow-floating flex items-center gap-1.5 transition-all duration-fast hover:scale-105 active:scale-95 font-semibold text-xs"
+            title="템플릿으로 새 문서 작성 (Ctrl+N)"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>새 문서</span>
+          </button>
+        </div>
 
         {/* Undo Toast Notification (Things style) */}
         {undoToast && (
@@ -584,6 +661,52 @@ export const App: React.FC = () => {
             if (exportModalState.pendingIds) {
               handleExport(exportModalState.target, exportModalState.pendingIds)
             }
+          }}
+        />
+
+        {/* Template Picker Modal (Ctrl+N) */}
+        <TemplatePickerModal
+          isOpen={isTemplatePickerOpen}
+          onClose={() => setIsTemplatePickerOpen(false)}
+          onSelectTemplate={async (templateId, customTitle) => {
+            if (!window.markflowApi?.createDocumentFromTemplate) return
+            const res = await window.markflowApi.createDocumentFromTemplate(templateId, customTitle)
+            if (res?.success && res?.item) {
+              await loadHistory()
+              setDetailViewItem(res.item)
+            }
+          }}
+        />
+
+        {/* Command Palette (Ctrl+K / Ctrl+P) */}
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigateDocument={handleNavigateDocument}
+          onSelectView={(v) => {
+            setCurrentView(v)
+            setDetailViewItem(null)
+          }}
+          onOpenQuickCapture={() => setIsQuickCaptureOpen(true)}
+          onOpenTemplatePicker={() => setIsTemplatePickerOpen(true)}
+        />
+
+        {/* Shortcuts Cheat Sheet Modal (?) */}
+        <ShortcutsModal
+          isOpen={isShortcutsOpen}
+          onClose={() => setIsShortcutsOpen(false)}
+        />
+
+        {/* Quick Capture Modal (Ctrl+Shift+Space) */}
+        <QuickCaptureModal
+          isOpen={isQuickCaptureOpen}
+          onClose={() => setIsQuickCaptureOpen(false)}
+          onSuccess={(newDoc) => {
+            loadHistory()
+            setUndoToast({
+              message: `'${newDoc.title}' 메모가 수집함에 저장되었습니다.`,
+              recordId: newDoc.id
+            })
           }}
         />
       </main>
