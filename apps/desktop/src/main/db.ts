@@ -3,6 +3,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
 import { createRequire } from 'module'
+import { parseSearchQuery, buildSqlFilterFromQuery } from './services/searchQueryParser'
 
 const nodeRequire = createRequire(import.meta.url)
 const Database = nodeRequire('better-sqlite3')
@@ -29,6 +30,9 @@ export interface ConversionRecord {
   category?: string
   first_image?: string
   custom_json?: string
+  groups?: string[]
+  groups_json?: string
+  is_starred?: number
   is_deleted?: number
   created_at?: string
 }
@@ -73,6 +77,8 @@ export function getDatabase(): Database.Database {
       category TEXT DEFAULT '',
       first_image TEXT DEFAULT '',
       custom_json TEXT DEFAULT '{}',
+      groups_json TEXT DEFAULT '[]',
+      is_starred INTEGER DEFAULT 0,
       is_deleted INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -80,6 +86,7 @@ export function getDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);
     CREATE INDEX IF NOT EXISTS idx_conversions_hash ON conversions(file_hash);
     CREATE INDEX IF NOT EXISTS idx_conversions_category ON conversions(category);
+    CREATE INDEX IF NOT EXISTS idx_conversions_starred ON conversions(is_starred);
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key TEXT PRIMARY KEY,
@@ -120,6 +127,12 @@ export function getDatabase(): Database.Database {
   } catch {}
   try {
     db.exec(`ALTER TABLE conversions ADD COLUMN custom_json TEXT DEFAULT '{}';`)
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE conversions ADD COLUMN groups_json TEXT DEFAULT '[]';`)
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE conversions ADD COLUMN is_starred INTEGER DEFAULT 0;`)
   } catch {}
 
   // FTS5 Full-Text Search Virtual Table with Trigram Tokenizer
@@ -166,11 +179,9 @@ export function upsertFtsIndex(
 ): void {
   try {
     const database = getDatabase()
-    // Delete existing entry if any
     const delStmt = database.prepare('DELETE FROM conversions_fts WHERE slug = ?')
     delStmt.run(slug)
 
-    // Insert new entry
     const insStmt = database.prepare(`
       INSERT INTO conversions_fts (slug, title, content, tags, category)
       VALUES (?, ?, ?, ?, ?)
@@ -207,15 +218,25 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
   }
   const tagsJsonStr = JSON.stringify(tagsArray)
 
+  let groupsArray: string[] = []
+  if (Array.isArray(record.groups)) {
+    groupsArray = record.groups
+  } else if (record.groups_json) {
+    try {
+      groupsArray = JSON.parse(record.groups_json)
+    } catch {}
+  }
+  const groupsJsonStr = JSON.stringify(groupsArray)
+
   const stmt = database.prepare(`
     INSERT INTO conversions (
       slug, title, source_file, source_path, source_type, source_location, file_hash, file_size,
       converted_at, library_path, status, quality_score, profile, markdown, exported_json,
-      tags_json, category, first_image, custom_json
+      tags_json, category, first_image, custom_json, groups_json, is_starred
     ) VALUES (
       @slug, @title, @source_file, @source_path, @source_type, @source_location, @file_hash, @file_size,
       @converted_at, @library_path, @status, @quality_score, @profile, @markdown, @exported_json,
-      @tags_json, @category, @first_image, @custom_json
+      @tags_json, @category, @first_image, @custom_json, @groups_json, @is_starred
     )
     ON CONFLICT(slug) DO UPDATE SET
       title = excluded.title,
@@ -235,6 +256,8 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
       category = excluded.category,
       first_image = excluded.first_image,
       custom_json = excluded.custom_json,
+      groups_json = excluded.groups_json,
+      is_starred = excluded.is_starred,
       is_deleted = 0
   `)
 
@@ -257,7 +280,9 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
     tags_json: tagsJsonStr,
     category: record.category || '',
     first_image: record.first_image || '',
-    custom_json: record.custom_json || '{}'
+    custom_json: record.custom_json || '{}',
+    groups_json: groupsJsonStr,
+    is_starred: record.is_starred ? 1 : 0
   })
 
   // Synchronize FTS5 index
@@ -273,6 +298,9 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
     ...record,
     tags: tagsArray,
     tags_json: tagsJsonStr,
+    groups: groupsArray,
+    groups_json: groupsJsonStr,
+    is_starred: record.is_starred ? 1 : 0,
     id: Number(info.lastInsertRowid)
   }
 }
@@ -288,6 +316,11 @@ export function findConversionByHash(hash: string): ConversionRecord | null {
   } catch {
     row.tags = []
   }
+  try {
+    row.groups = JSON.parse(row.groups_json || '[]')
+  } catch {
+    row.groups = []
+  }
   return row as ConversionRecord
 }
 
@@ -298,13 +331,21 @@ export function getConversions(params?: {
   status?: string
   category?: string
   tag?: string
+  group?: string
   includeArchived?: boolean
+  starredOnly?: boolean
+  todayOnly?: boolean
 }): ConversionRecord[] {
   const database = getDatabase()
   let sql = 'SELECT * FROM conversions WHERE is_deleted = 0'
   const queryParams: any = {}
 
-  if (params?.reviewOnly) {
+  if (params?.todayOnly) {
+    const today = new Date().toISOString().split('T')[0]
+    sql += ` AND (is_starred = 1 OR converted_at LIKE '${today}%' OR status = 'review_needed' OR (quality_score IS NOT NULL AND quality_score < 70))`
+  } else if (params?.starredOnly) {
+    sql += ' AND is_starred = 1'
+  } else if (params?.reviewOnly) {
     sql += " AND (status = 'review_needed' OR (quality_score IS NOT NULL AND quality_score < 70))"
   } else if (params?.status) {
     sql += ' AND status = @status'
@@ -324,30 +365,54 @@ export function getConversions(params?: {
     queryParams.tag = `%"${params.tag}"%`
   }
 
-  // Check if FTS5 search query is provided
+  if (params?.group) {
+    sql += ' AND groups_json LIKE @group'
+    queryParams.group = `%${params.group}%`
+  }
+
+  // Parse advanced query syntax if query contains special operators or fields
   if (params?.search && params.search.trim().length > 0) {
-    const q = params.search.trim()
-    try {
-      // Try FTS5 search query first
-      const ftsStmt = database.prepare(`
-        SELECT slug FROM conversions_fts
-        WHERE conversions_fts MATCH ?
-        ORDER BY rank
-      `)
-      // Wrap query in quotes for trigram matching
-      const ftsMatches = ftsStmt.all(`"${q.replace(/"/g, '""')}"`) as { slug: string }[]
-      if (ftsMatches.length > 0) {
-        const slugs = ftsMatches.map((m) => `'${m.slug.replace(/'/g, "''")}'`).join(',')
-        sql += ` AND slug IN (${slugs})`
-      } else {
-        // Fallback to LIKE if FTS yielded no matches
-        sql += ' AND (title LIKE @search OR source_file LIKE @search OR markdown LIKE @search)'
-        queryParams.search = `%${q}%`
+    const rawSearch = params.search.trim()
+    const parsed = parseSearchQuery(rawSearch)
+
+    // If query has field queries, date, score, negations, or phrases:
+    if (
+      parsed.tags.length > 0 ||
+      parsed.types.length > 0 ||
+      parsed.statuses.length > 0 ||
+      parsed.groups.length > 0 ||
+      parsed.dateComparison ||
+      parsed.scoreComparison ||
+      parsed.exportedFilter !== undefined ||
+      parsed.negations.length > 0 ||
+      parsed.phrases.length > 0 ||
+      parsed.hasOrCondition
+    ) {
+      const { whereClauses, params: sqlParams } = buildSqlFilterFromQuery(parsed)
+      if (whereClauses.length > 0) {
+        sql += ` AND (${whereClauses.join(' AND ')})`
+        Object.assign(queryParams, sqlParams)
       }
-    } catch {
-      // Syntax error or fallback
-      sql += ' AND (title LIKE @search OR source_file LIKE @search OR markdown LIKE @search)'
-      queryParams.search = `%${q}%`
+    } else {
+      // Standard text search via FTS5 or LIKE
+      try {
+        const ftsStmt = database.prepare(`
+          SELECT slug FROM conversions_fts
+          WHERE conversions_fts MATCH ?
+          ORDER BY rank
+        `)
+        const ftsMatches = ftsStmt.all(`"${rawSearch.replace(/"/g, '""')}"`) as { slug: string }[]
+        if (ftsMatches.length > 0) {
+          const slugs = ftsMatches.map((m) => `'${m.slug.replace(/'/g, "''")}'`).join(',')
+          sql += ` AND slug IN (${slugs})`
+        } else {
+          sql += ' AND (title LIKE @search OR source_file LIKE @search OR markdown LIKE @search)'
+          queryParams.search = `%${rawSearch}%`
+        }
+      } catch {
+        sql += ' AND (title LIKE @search OR source_file LIKE @search OR markdown LIKE @search)'
+        queryParams.search = `%${rawSearch}%`
+      }
     }
   }
 
@@ -367,6 +432,11 @@ export function getConversions(params?: {
       row.tags = JSON.parse(row.tags_json || '[]')
     } catch {
       row.tags = []
+    }
+    try {
+      row.groups = JSON.parse(row.groups_json || '[]')
+    } catch {
+      row.groups = []
     }
     return row as ConversionRecord
   })
@@ -465,6 +535,17 @@ export function updateConversion(id: number, updates: Partial<ConversionRecord>)
     fields.push('custom_json = @custom_json')
     values.custom_json = updates.custom_json
   }
+  if (updates.groups !== undefined) {
+    fields.push('groups_json = @groups_json')
+    values.groups_json = JSON.stringify(updates.groups)
+  } else if (updates.groups_json !== undefined) {
+    fields.push('groups_json = @groups_json')
+    values.groups_json = updates.groups_json
+  }
+  if (updates.is_starred !== undefined) {
+    fields.push('is_starred = @is_starred')
+    values.is_starred = updates.is_starred ? 1 : 0
+  }
 
   if (fields.length > 0) {
     const updateSql = `UPDATE conversions SET ${fields.join(', ')} WHERE id = @id`
@@ -478,6 +559,11 @@ export function updateConversion(id: number, updates: Partial<ConversionRecord>)
       updated.tags = JSON.parse(updated.tags_json || '[]')
     } catch {
       updated.tags = []
+    }
+    try {
+      updated.groups = JSON.parse(updated.groups_json || '[]')
+    } catch {
+      updated.groups = []
     }
     // Sync FTS
     upsertFtsIndex(
@@ -502,6 +588,11 @@ export function getConversionById(id: number): ConversionRecord | null {
   } catch {
     row.tags = []
   }
+  try {
+    row.groups = JSON.parse(row.groups_json || '[]')
+  } catch {
+    row.groups = []
+  }
   return row as ConversionRecord
 }
 
@@ -514,6 +605,11 @@ export function getConversionBySlug(slug: string): ConversionRecord | null {
     row.tags = JSON.parse(row.tags_json || '[]')
   } catch {
     row.tags = []
+  }
+  try {
+    row.groups = JSON.parse(row.groups_json || '[]')
+  } catch {
+    row.groups = []
   }
   return row as ConversionRecord
 }

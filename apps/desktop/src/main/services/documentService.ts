@@ -16,6 +16,7 @@ export interface ParsedDocument {
   status: string
   tags: string[]
   category: string
+  groups: string[]
   source_file: string
   source_type: string
   converted_at: string
@@ -55,12 +56,17 @@ export function readDocumentFile(filePath: string): ParsedDocument | null {
       ? parsed.data.tags.map((t: any) => String(t).trim())
       : []
 
+    const groups = Array.isArray(parsed.data.groups)
+      ? parsed.data.groups.map((g: any) => String(g).trim())
+      : []
+
     return {
       slug,
       title: parsed.data.title || slug,
       status: parsed.data.status || 'inbox',
       tags,
       category: parsed.data.category || '',
+      groups,
       source_file: parsed.data.source_file || `${slug}.md`,
       source_type: parsed.data.source_type || 'md',
       converted_at: parsed.data.converted_at || new Date().toISOString(),
@@ -103,6 +109,7 @@ export function updateDocumentFrontmatter(
 
   const firstImg = extractFirstImage(parsed.content)
   const tags = Array.isArray(updatedData.tags) ? updatedData.tags : existing?.tags || []
+  const groups = Array.isArray(updatedData.groups) ? updatedData.groups : existing?.groups || []
 
   // Update DB cache
   if (existing && existing.id) {
@@ -111,6 +118,7 @@ export function updateDocumentFrontmatter(
       status: updatedData.status ?? existing.status,
       category: updatedData.category ?? existing.category,
       tags: tags,
+      groups: groups,
       quality_score: typeof updatedData.quality_score === 'number' ? updatedData.quality_score : existing.quality_score,
       markdown: updatedMarkdown,
       first_image: firstImg
@@ -129,6 +137,7 @@ export function updateDocumentFrontmatter(
       quality_score: updatedData.quality_score ?? 100,
       tags,
       category: updatedData.category || '',
+      groups,
       first_image: firstImg,
       markdown: updatedMarkdown
     })
@@ -321,6 +330,7 @@ export function rebuildLibraryIndex(libraryDir: string): {
             quality_score: doc.quality_score,
             tags: doc.tags,
             category: doc.category,
+            groups: doc.groups,
             first_image: doc.first_image,
             markdown: matter.stringify(doc.content, doc.data)
           })

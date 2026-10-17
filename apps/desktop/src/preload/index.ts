@@ -139,6 +139,17 @@ export interface MarkFlowApi {
     }
   ) => Promise<{ successCount: number; errors: string[] }>
   onLibraryChanged: (callback: (event: any) => void) => () => void
+
+  // Phase 8-(가): Groups & Smart Groups APIs
+  getAreas: () => Promise<any[]>
+  addArea: (name: string) => Promise<any[]>
+  addProject: (areaId: string, projectName: string) => Promise<any[]>
+  deleteAreaOrProject: (id: string) => Promise<any[]>
+  assignDocumentToGroup: (slug: string, groupPath: string, replace?: boolean) => Promise<any>
+  getSmartGroups: () => Promise<any[]>
+  saveSmartGroup: (group: { name: string; query: string; icon?: string }) => Promise<any[]>
+  deleteSmartGroup: (id: string) => Promise<any[]>
+  toggleStarDocument: (id: number) => Promise<any>
 }
 
 const api: MarkFlowApi = {
@@ -204,7 +215,19 @@ const api: MarkFlowApi = {
     return () => {
       ipcRenderer.removeListener('library:external-changed', subscription)
     }
-  }
+  },
+
+  // Phase 8-(가): Groups & Smart Groups methods
+  getAreas: () => ipcRenderer.invoke('group:get-areas'),
+  addArea: (name) => ipcRenderer.invoke('group:add-area', name),
+  addProject: (areaId, projectName) => ipcRenderer.invoke('group:add-project', areaId, projectName),
+  deleteAreaOrProject: (id) => ipcRenderer.invoke('group:delete-area-or-project', id),
+  assignDocumentToGroup: (slug, groupPath, replace) =>
+    ipcRenderer.invoke('group:assign-document', slug, groupPath, replace),
+  getSmartGroups: () => ipcRenderer.invoke('smart-group:get-all'),
+  saveSmartGroup: (group) => ipcRenderer.invoke('smart-group:save', group),
+  deleteSmartGroup: (id) => ipcRenderer.invoke('smart-group:delete', id),
+  toggleStarDocument: (id) => ipcRenderer.invoke('doc:toggle-star', id)
 }
 
 try {

@@ -34,6 +34,17 @@ import {
   batchUpdateDocuments
 } from './services/documentService'
 import { LibraryWatcher } from './services/libraryWatcher'
+import {
+  getAreaHierarchy,
+  addArea,
+  addProject,
+  deleteAreaOrProject,
+  assignDocumentToGroup,
+  getSmartGroups,
+  saveSmartGroup,
+  deleteSmartGroup,
+  toggleStarDocument
+} from './services/smartGroupService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -542,6 +553,43 @@ ipcMain.handle('board:rebuild-index', () => {
 
 ipcMain.handle('board:batch-update', (_event, slugs: string[], operations: any) => {
   return batchUpdateDocuments(slugs, operations)
+})
+
+// IPC Handlers: Phase 8-(가) Groups & Smart Groups & Today
+ipcMain.handle('group:get-areas', () => {
+  return getAreaHierarchy()
+})
+
+ipcMain.handle('group:add-area', (_event, name: string) => {
+  return addArea(name)
+})
+
+ipcMain.handle('group:add-project', (_event, areaId: string, projectName: string) => {
+  return addProject(areaId, projectName)
+})
+
+ipcMain.handle('group:delete-area-or-project', (_event, id: string) => {
+  return deleteAreaOrProject(id)
+})
+
+ipcMain.handle('group:assign-document', (_event, slug: string, groupPath: string, replace?: boolean) => {
+  return assignDocumentToGroup(slug, groupPath, replace)
+})
+
+ipcMain.handle('smart-group:get-all', () => {
+  return getSmartGroups()
+})
+
+ipcMain.handle('smart-group:save', (_event, group: any) => {
+  return saveSmartGroup(group)
+})
+
+ipcMain.handle('smart-group:delete', (_event, id: string) => {
+  return deleteSmartGroup(id)
+})
+
+ipcMain.handle('doc:toggle-star', (_event, id: number) => {
+  return toggleStarDocument(id)
 })
 
 app.whenReady().then(async () => {

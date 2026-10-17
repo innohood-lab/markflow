@@ -27,17 +27,32 @@ export type BoardViewMode = 'list' | 'table' | 'kanban' | 'gallery'
 interface BoardViewProps {
   onOpenDetail: (doc: ConversionRecord) => void
   onExport: (target: 'github' | 'obsidian' | 'both', itemIds: number[]) => void
+  groupFilter?: string
+  initialSearchQuery?: string
+  titleOverride?: string
 }
 
-export const BoardView: React.FC<BoardViewProps> = ({ onOpenDetail, onExport }) => {
+export const BoardView: React.FC<BoardViewProps> = ({
+  onOpenDetail,
+  onExport,
+  groupFilter,
+  initialSearchQuery,
+  titleOverride
+}) => {
   const [viewMode, setViewMode] = useState<BoardViewMode>('list')
   const [documents, setDocuments] = useState<ConversionRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '')
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [categoryFilter, setCategoryFilter] = useState<string>('')
   const [includeArchived, setIncludeArchived] = useState(false)
   const [sortOrder, setSortOrder] = useState<'latest' | 'name' | 'score'>('latest')
+
+  useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery)
+    }
+  }, [initialSearchQuery])
 
   // Selection state for batch actions
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
@@ -57,6 +72,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ onOpenDetail, onExport }) 
         sort: sortOrder,
         status: statusFilter || undefined,
         category: categoryFilter || undefined,
+        group: groupFilter || undefined,
         includeArchived
       })
       setDocuments(docs || [])
@@ -65,7 +81,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ onOpenDetail, onExport }) 
     } finally {
       setIsLoading(false)
     }
-  }, [searchQuery, sortOrder, statusFilter, categoryFilter, includeArchived])
+  }, [searchQuery, sortOrder, statusFilter, categoryFilter, groupFilter, includeArchived])
 
   useEffect(() => {
     loadDocuments()
@@ -208,7 +224,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ onOpenDetail, onExport }) 
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <span>라이브러리 보드</span>
+              <span>{titleOverride || (groupFilter ? `프로젝트: ${groupFilter}` : '라이브러리 보드')}</span>
               {rebuildMessage && (
                 <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-primary/10 text-primary animate-fade-in">
                   {rebuildMessage}
@@ -318,6 +334,24 @@ export const BoardView: React.FC<BoardViewProps> = ({ onOpenDetail, onExport }) 
                 </button>
               )}
             </div>
+            {searchQuery && (
+              <button
+                onClick={async () => {
+                  const name = prompt('새 스마트 그룹의 이름을 입력하세요:', searchQuery.trim())
+                  if (name && name.trim()) {
+                    await window.markflowApi.saveSmartGroup({
+                      name: name.trim(),
+                      query: searchQuery.trim()
+                    })
+                    alert(`스마트 그룹 '${name.trim()}'이 사이드바에 저장되었습니다!`)
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-secondary-foreground text-xs font-medium whitespace-nowrap transition-colors border border-border/40"
+                title="이 검색 조건을 사이드바 스마트 그룹으로 저장"
+              >
+                스마트 그룹 저장
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap text-xs">

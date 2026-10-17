@@ -9,6 +9,8 @@ import { DetailViewer } from './components/DetailViewer'
 import { SettingsModal } from './components/SettingsModal'
 import { ExportProgressModal } from './components/ExportProgressModal'
 import { BoardView } from './components/board/BoardView'
+import { TodayView } from './components/TodayView'
+import { LogbookView } from './components/LogbookView'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus } from 'lucide-react'
 
@@ -32,6 +34,11 @@ export const App: React.FC = () => {
   const [activeConversions, setActiveConversions] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
   const [undoToast, setUndoToast] = useState<{ message: string; recordId: number } | null>(null)
+
+  // Phase 8-(가) Groups & Smart Groups view state
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [selectedSmartQuery, setSelectedSmartQuery] = useState<string | null>(null)
+  const [selectedSmartTitle, setSelectedSmartTitle] = useState<string | null>(null)
 
   // Phase 5: Settings & Export state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -355,7 +362,12 @@ export const App: React.FC = () => {
       {/* 1. Left Sidebar (Things style) */}
       <Sidebar
         currentView={currentView}
-        onSelectView={setCurrentView}
+        onSelectView={(view, extraData) => {
+          setCurrentView(view)
+          if (extraData?.group) setSelectedGroup(extraData.group)
+          if (extraData?.smartQuery) setSelectedSmartQuery(extraData.smartQuery)
+          if (extraData?.smartTitle) setSelectedSmartTitle(extraData.smartTitle)
+        }}
         engineStatus={engineStatus}
         onRetryEngine={handleRetryEngine}
         isDark={isDark}
@@ -465,8 +477,30 @@ export const App: React.FC = () => {
                   </div>
                 }
               />
+            ) : currentView === 'today' ? (
+              <TodayView
+                onOpenDetail={(item) => setDetailViewItem(item)}
+                onExport={(target, ids) => handleExport(target, ids)}
+              />
+            ) : currentView === 'logbook' ? (
+              <LogbookView onUndoDelete={handleUndoDelete} />
             ) : currentView === 'library' ? (
               <BoardView
+                onOpenDetail={(item) => setDetailViewItem(item)}
+                onExport={(target, ids) => handleExport(target, ids)}
+              />
+            ) : currentView.startsWith('group:') ? (
+              <BoardView
+                key={selectedGroup || currentView}
+                groupFilter={selectedGroup || currentView.replace('group:', '')}
+                onOpenDetail={(item) => setDetailViewItem(item)}
+                onExport={(target, ids) => handleExport(target, ids)}
+              />
+            ) : currentView.startsWith('smart:') ? (
+              <BoardView
+                key={selectedSmartQuery || currentView}
+                initialSearchQuery={selectedSmartQuery || ''}
+                titleOverride={selectedSmartTitle || undefined}
                 onOpenDetail={(item) => setDetailViewItem(item)}
                 onExport={(target, ids) => handleExport(target, ids)}
               />
