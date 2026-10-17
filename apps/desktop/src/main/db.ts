@@ -18,6 +18,7 @@ export interface ConversionRecord {
   library_path: string
   status?: string
   quality_score?: number | null
+  profile?: string
   markdown?: string
   exported_json?: string
   is_deleted?: number
@@ -51,8 +52,9 @@ export function getDatabase(): Database.Database {
       file_size INTEGER DEFAULT 0,
       converted_at TEXT NOT NULL,
       library_path TEXT NOT NULL,
-      status TEXT DEFAULT '미분류',
+      status TEXT DEFAULT 'inbox',
       quality_score INTEGER,
+      profile TEXT DEFAULT 'balanced',
       markdown TEXT,
       exported_json TEXT DEFAULT '{}',
       is_deleted INTEGER DEFAULT 0,
@@ -62,6 +64,12 @@ export function getDatabase(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_conversions_status ON conversions(status);
   `)
 
+  try {
+    db.exec(`ALTER TABLE conversions ADD COLUMN profile TEXT DEFAULT 'balanced';`)
+  } catch {
+    // Column already exists
+  }
+
   return db
 }
 
@@ -70,10 +78,10 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
   const stmt = database.prepare(`
     INSERT INTO conversions (
       slug, title, source_file, source_path, source_type, file_size,
-      converted_at, library_path, status, quality_score, markdown, exported_json
+      converted_at, library_path, status, quality_score, profile, markdown, exported_json
     ) VALUES (
       @slug, @title, @source_file, @source_path, @source_type, @file_size,
-      @converted_at, @library_path, @status, @quality_score, @markdown, @exported_json
+      @converted_at, @library_path, @status, @quality_score, @profile, @markdown, @exported_json
     )
     ON CONFLICT(slug) DO UPDATE SET
       title = excluded.title,
@@ -83,6 +91,9 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
       file_size = excluded.file_size,
       converted_at = excluded.converted_at,
       library_path = excluded.library_path,
+      status = excluded.status,
+      quality_score = excluded.quality_score,
+      profile = excluded.profile,
       markdown = excluded.markdown,
       is_deleted = 0
   `)
@@ -96,8 +107,9 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
     file_size: record.file_size || 0,
     converted_at: record.converted_at,
     library_path: record.library_path,
-    status: record.status || '미분류',
+    status: record.status || 'inbox',
     quality_score: record.quality_score ?? null,
+    profile: record.profile || 'balanced',
     markdown: record.markdown || '',
     exported_json: record.exported_json || '{}'
   })
@@ -105,10 +117,14 @@ export function saveConversion(record: ConversionRecord): ConversionRecord {
   return { ...record, id: Number(info.lastInsertRowid) }
 }
 
-export function getConversions(params?: { search?: string; sort?: 'latest' | 'name' }): ConversionRecord[] {
+export function getConversions(params?: { search?: string; sort?: 'latest' | 'name'; reviewOnly?: boolean }): ConversionRecord[] {
   const database = getDatabase()
   let sql = 'SELECT * FROM conversions WHERE is_deleted = 0'
   const queryParams: any = {}
+
+  if (params?.reviewOnly) {
+    sql += " AND (status = 'review_needed' OR (quality_score IS NOT NULL AND quality_score < 70))"
+  }
 
   if (params?.search && params.search.trim().length > 0) {
     sql += ' AND (title LIKE @search OR source_file LIKE @search)'
@@ -123,6 +139,15 @@ export function getConversions(params?: { search?: string; sort?: 'latest' | 'na
 
   const stmt = database.prepare(sql)
   return stmt.all(queryParams) as ConversionRecord[]
+}
+
+export function getReviewNeededCount(): number {
+  const database = getDatabase()
+  const stmt = database.prepare(
+    "SELECT COUNT(*) as count FROM conversions WHERE is_deleted = 0 AND (status = 'review_needed' OR (quality_score IS NOT NULL AND quality_score < 70))"
+  )
+  const row = stmt.get() as { count: number } | undefined
+  return row?.count || 0
 }
 
 export function deleteConversion(id: number): ConversionRecord | null {

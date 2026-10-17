@@ -98,17 +98,38 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
                 </div>
 
                 {/* Right badges & delete button */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sidebar-background border border-border text-muted-foreground">
-                    {item.status || '미분류'}
-                  </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Quality Score Badge */}
+                  {item.quality_score !== undefined && item.quality_score !== null && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                        item.quality_score >= 85
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                          : item.quality_score >= 70
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                      }`}
+                      title={`품질 점수: ${item.quality_score}점 (${
+                        item.quality_score >= 85 ? '우수' : item.quality_score >= 70 ? '양호' : '검토 필요'
+                      })`}
+                    >
+                      {item.quality_score}점
+                    </span>
+                  )}
+
+                  {/* Profile badge if non-default */}
+                  {item.profile && item.profile !== 'balanced' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                      {item.profile === 'fast' ? '빠름' : '최고품질'}
+                    </span>
+                  )}
 
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       onDelete(item.id)
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all ml-1"
                     title="삭제"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

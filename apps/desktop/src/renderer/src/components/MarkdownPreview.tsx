@@ -118,6 +118,37 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ item, onDelete
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 select-text">
+        {/* Quality Score Card */}
+        {item.quality_score !== undefined && item.quality_score !== null && (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border/80 shadow-subtle">
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`px-2.5 py-1 rounded-md text-xs font-bold ${
+                  item.quality_score >= 85
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : item.quality_score >= 70
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                }`}
+              >
+                품질 점수: {item.quality_score}점
+              </span>
+              <span className="text-xs text-muted-foreground font-medium">
+                {item.quality_score >= 85
+                  ? '우수 — 본문과 서식이 완전하게 보존되었습니다'
+                  : item.quality_score >= 70
+                  ? '양호 — 본문이 잘 추출되었습니다'
+                  : '검토 필요 — 이미지 누락 또는 서식 확인이 필요합니다'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="px-2 py-0.5 rounded bg-muted/80 font-mono">
+                프로필: {item.profile || 'balanced'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Frontmatter display (Notion property style) */}
         {frontmatterText && (
           <div className="p-3 rounded-lg bg-sidebar-background border border-border/70 text-xs font-mono text-muted-foreground space-y-1">

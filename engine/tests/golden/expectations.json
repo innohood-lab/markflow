@@ -1,0 +1,32 @@
+{
+  "경영계획_초안.docx": {
+    "min_quality_score": 80,
+    "required_phrases": ["경영계획", "2026"],
+    "min_char_count": 50,
+    "must_have_headings": true
+  },
+  "Argos_구조도.pptx": {
+    "min_quality_score": 75,
+    "required_phrases": ["Argos", "슬라이드"],
+    "min_char_count": 50,
+    "must_have_headings": true
+  },
+  "샘플_보고서.pdf": {
+    "min_quality_score": 75,
+    "required_phrases": ["보고서"],
+    "min_char_count": 40,
+    "must_have_headings": false
+  },
+  "2026_실적분석.csv": {
+    "min_quality_score": 80,
+    "required_phrases": ["1분기", "12000"],
+    "min_char_count": 50,
+    "must_have_tables": true
+  },
+  "기술블로그_스크랩.html": {
+    "min_quality_score": 80,
+    "required_phrases": ["Antigravity", "사이드카"],
+    "min_char_count": 40,
+    "must_not_contain": ["<nav>", "<footer>", "광고 영역"]
+  }
+}

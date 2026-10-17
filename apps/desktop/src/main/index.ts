@@ -2,7 +2,13 @@ import { app, shell, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
 import { join, extname } from 'path'
 import * as fs from 'fs'
 import { SidecarManager } from './sidecar'
-import { saveConversion, getConversions, deleteConversion, restoreConversion } from './db'
+import {
+  saveConversion,
+  getConversions,
+  getReviewNeededCount,
+  deleteConversion,
+  restoreConversion
+} from './db'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -103,30 +109,39 @@ ipcMain.handle('engine:restart', async () => {
   return await sidecar.start()
 })
 
-ipcMain.handle('engine:convert', async (_event, filePath: string, libraryDir?: string) => {
-  const result = await sidecar.convertDocument(filePath, libraryDir)
-  if (result.status === 'success') {
-    // Save to SQLite
-    const record = saveConversion({
-      slug: result.slug,
-      title: result.title,
-      source_file: result.source_file,
-      source_path: result.source_path,
-      source_type: result.source_type,
-      file_size: result.file_size,
-      converted_at: result.converted_at,
-      library_path: result.library_path,
-      status: '미분류',
-      markdown: result.markdown
-    })
-    return { ...result, id: record.id }
+ipcMain.handle(
+  'engine:convert',
+  async (_event, filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) => {
+    const result = await sidecar.convertDocument(filePath, libraryDir, profile || 'balanced', llmConfig)
+    if (result.status === 'success') {
+      // Save to SQLite
+      const record = saveConversion({
+        slug: result.slug,
+        title: result.title,
+        source_file: result.source_file,
+        source_path: result.source_path,
+        source_type: result.source_type,
+        file_size: result.file_size,
+        converted_at: result.converted_at,
+        library_path: result.library_path,
+        status: result.quality_report?.review_needed ? 'review_needed' : 'inbox',
+        quality_score: result.quality_score ?? null,
+        profile: result.profile || profile || 'balanced',
+        markdown: result.markdown
+      })
+      return { ...result, id: record.id }
+    }
+    return result
   }
-  return result
-})
+)
 
 // IPC Handlers: Database
 ipcMain.handle('db:get-history', (_event, params) => {
   return getConversions(params)
+})
+
+ipcMain.handle('db:get-review-count', () => {
+  return getReviewNeededCount()
 })
 
 ipcMain.handle('db:delete-item', async (_event, id: number) => {
@@ -143,6 +158,22 @@ ipcMain.handle('db:delete-item', async (_event, id: number) => {
 
 ipcMain.handle('db:restore-item', (_event, id: number) => {
   return restoreConversion(id)
+})
+
+ipcMain.handle('library:get-asset-data-url', async (_event, relPath: string) => {
+  try {
+    const home = app.getPath('documents')
+    const fullPath = join(home, 'MarkFlow', 'Library', relPath)
+    if (fs.existsSync(fullPath)) {
+      const ext = extname(fullPath).toLowerCase().replace('.', '')
+      const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png')
+      const data = fs.readFileSync(fullPath).toString('base64')
+      return `data:${mime};base64,${data}`
+    }
+  } catch (err) {
+    console.warn('[Main] Failed to read asset:', err)
+  }
+  return null
 })
 
 // IPC Handlers: OS & Shell

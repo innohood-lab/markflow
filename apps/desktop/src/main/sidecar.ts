@@ -51,26 +51,6 @@ export class SidecarManager {
     }
   }
 
-  /**
-   * Request document conversion from the sidecar engine
-   */
-  public async convertDocument(filePath: string, libraryDir?: string): Promise<any> {
-    if (this.currentStatus.state !== 'ready' || !this.port) {
-      throw new Error('변환 엔진이 준비되지 않았습니다. 사이드바 하단 상태를 확인해 주세요.')
-    }
-
-    const response = await fetch(`http://127.0.0.1:${this.port}/convert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_path: filePath, library_dir: libraryDir })
-    })
-
-    if (!response.ok) {
-      throw new Error(`엔진 통신 오류 (HTTP ${response.status}): ${await response.text()}`)
-    }
-
-    return await response.json()
-  }
 
   /**
    * Find an available unused TCP port on 127.0.0.1
@@ -307,6 +287,54 @@ export class SidecarManager {
     this.childProcess = null
     this.port = null
     this.setStatus({ state: 'stopped', port: null })
+  }
+
+  /**
+   * Send document conversion request to Python FastAPI sidecar
+   */
+  public async convertDocument(
+    filePath: string,
+    libraryDir?: string,
+    profile: string = 'balanced',
+    llmConfig?: any
+  ): Promise<any> {
+    if (!this.port || this.status.state !== 'ready') {
+      return {
+        status: 'error',
+        message: '변환 엔진이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.',
+        file_path: filePath
+      }
+    }
+
+    try {
+      const url = `http://127.0.0.1:${this.port}/convert`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_path: filePath,
+          library_dir: libraryDir,
+          profile,
+          llm_config: llmConfig
+        })
+      })
+
+      if (!res.ok) {
+        return {
+          status: 'error',
+          message: `엔진 응답 오류 (${res.status}): ${res.statusText}`,
+          file_path: filePath
+        }
+      }
+
+      return await res.json()
+    } catch (err: any) {
+      return {
+        status: 'error',
+        message: `변환 요청 실패: ${err?.message || err}`,
+        file_path: filePath
+      }
+    }
   }
 
   /**

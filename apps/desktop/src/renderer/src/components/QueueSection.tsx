@@ -36,6 +36,8 @@ interface QueueSectionProps {
   autoConvert: boolean
   onToggleAutoConvert: (enabled: boolean) => void
   isConverting: boolean
+  profile: 'balanced' | 'fast' | 'best_quality'
+  onProfileChange: (profile: 'balanced' | 'fast' | 'best_quality') => void
 }
 
 export const QueueSection: React.FC<QueueSectionProps> = ({
@@ -47,7 +49,9 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
   onRetryItem,
   autoConvert,
   onToggleAutoConvert,
-  isConverting
+  isConverting,
+  profile,
+  onProfileChange
 }) => {
   const [isDragOver, setIsDragOver] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)
@@ -135,7 +139,7 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background border-r border-border/40 select-none">
       {/* Section Header */}
-      <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between shrink-0">
+      <div className="px-4 py-2.5 border-b border-border/40 flex items-center justify-between shrink-0 bg-sidebar-background/30">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-bold text-foreground">변환 대기열</h2>
           {queue.length > 0 && (
@@ -144,17 +148,19 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
             </span>
           )}
         </div>
-        <div className="text-xs text-muted-foreground">
-          {convertingCount > 0 ? (
-            <span className="text-primary font-medium flex items-center gap-1">
-              <RotateCw className="w-3 h-3 animate-spin" />
-              변환 진행 중 ({convertingCount}/2)
-            </span>
-          ) : pendingCount > 0 ? (
-            <span>대기 {pendingCount}건</span>
-          ) : (
-            <span>비어 있음</span>
-          )}
+
+        {/* Profile Selector */}
+        <div className="flex items-center gap-2">
+          <select
+            value={profile}
+            onChange={(e) => onProfileChange(e.target.value as any)}
+            className="text-[11px] bg-card hover:bg-muted border border-border/70 rounded-md px-2 py-1 text-foreground font-medium outline-none cursor-pointer transition-colors shadow-subtle"
+            title="변환 품질 프로필 선택"
+          >
+            <option value="balanced">균형 모드</option>
+            <option value="fast">빠름 모드</option>
+            <option value="best_quality">최고 품질 (OCR)</option>
+          </select>
         </div>
       </div>
 

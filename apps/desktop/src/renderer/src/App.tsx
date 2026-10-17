@@ -17,14 +17,16 @@ export const App: React.FC = () => {
     port: null
   })
 
-  // Phase 2 state: Queue & History
+  // Phase 2 & 3 state: Queue, Profile & History
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const [profile, setProfile] = useState<'balanced' | 'fast' | 'best_quality'>('balanced')
   const [autoConvert, setAutoConvert] = useState(true)
   const [historyItems, setHistoryItems] = useState<ConversionRecord[]>([])
   const [selectedItem, setSelectedItem] = useState<ConversionRecord | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<'latest' | 'name'>('latest')
   const [activeConversions, setActiveConversions] = useState(0)
+  const [reviewCount, setReviewCount] = useState(0)
   const [undoToast, setUndoToast] = useState<{ message: string; recordId: number } | null>(null)
 
   // Track active conversion count using ref for accurate queue scheduling
@@ -46,9 +48,14 @@ export const App: React.FC = () => {
       try {
         const records = await window.markflowApi.getHistory({
           search: searchQuery,
-          sort: sortOrder
+          sort: sortOrder,
+          reviewOnly: currentView === 'review'
         })
         setHistoryItems(records || [])
+
+        const count = await window.markflowApi.getReviewCount()
+        setReviewCount(count || 0)
+
         // If selected item exists, refresh its content
         if (selectedItem) {
           const fresh = records?.find((r) => r.id === selectedItem.id)
@@ -58,11 +65,11 @@ export const App: React.FC = () => {
         console.error('[App] Failed to load history:', err)
       }
     }
-  }, [searchQuery, sortOrder, selectedItem])
+  }, [searchQuery, sortOrder, currentView, selectedItem])
 
   useEffect(() => {
     loadHistory()
-  }, [searchQuery, sortOrder])
+  }, [searchQuery, sortOrder, currentView])
 
   // Connect to Electron sidecar status
   useEffect(() => {
@@ -131,7 +138,7 @@ export const App: React.FC = () => {
     setActiveConversions((c) => c + 1)
 
     try {
-      const res = await window.markflowApi.convertDocument(item.path)
+      const res = await window.markflowApi.convertDocument(item.path, undefined, profile)
 
       if (res.status === 'success') {
         setQueue((prev) =>
@@ -140,9 +147,14 @@ export const App: React.FC = () => {
         // Refresh history and auto-select newly converted document
         const updatedHistory = await window.markflowApi.getHistory({
           search: searchQuery,
-          sort: sortOrder
+          sort: sortOrder,
+          reviewOnly: currentView === 'review'
         })
         setHistoryItems(updatedHistory || [])
+
+        const count = await window.markflowApi.getReviewCount()
+        setReviewCount(count || 0)
+
         const converted = updatedHistory?.find((h) => h.slug === res.slug)
         if (converted) {
           setSelectedItem(converted)
@@ -207,6 +219,8 @@ export const App: React.FC = () => {
       if (selectedItem?.id === id) {
         setSelectedItem(null)
       }
+      const count = await window.markflowApi.getReviewCount()
+      setReviewCount(count || 0)
       setUndoToast({
         message: `'${deleted.title}' 문서가 삭제되었습니다.`,
         recordId: id
@@ -235,6 +249,7 @@ export const App: React.FC = () => {
         onRetryEngine={handleRetryEngine}
         isDark={isDark}
         onToggleTheme={() => setIsDark((prev) => !prev)}
+        reviewCount={reviewCount}
       />
 
       {/* 2. Main Content Area */}
@@ -242,18 +257,25 @@ export const App: React.FC = () => {
         {/* Top Header */}
         <header className="px-6 py-4 shrink-0 border-b border-border/40 select-text flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">수집함</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {currentView === 'review' ? '검토 필요' : '수집함'}
+            </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요
+              {currentView === 'review'
+                ? '품질 점수가 70점 미만이거나 스캔 등 확인이 필요한 문서 목록입니다'
+                : '새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요'}
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>보관 문서: <strong className="text-foreground">{historyItems.length}</strong>건</span>
+            <span>
+              {currentView === 'review' ? '검토 대상' : '보관 문서'}:{' '}
+              <strong className="text-foreground">{historyItems.length}</strong>건
+            </span>
           </div>
         </header>
 
         {/* 2-Pane Split: Left Queue, Right History & Preview */}
-        {currentView === 'inbox' ? (
+        {currentView === 'inbox' || currentView === 'review' ? (
           <SplitPane
             defaultLeftWidthPercent={42}
             minLeftWidth={320}
@@ -273,6 +295,8 @@ export const App: React.FC = () => {
                 autoConvert={autoConvert}
                 onToggleAutoConvert={setAutoConvert}
                 isConverting={activeConversions > 0}
+                profile={profile}
+                onProfileChange={setProfile}
               />
             }
             right={

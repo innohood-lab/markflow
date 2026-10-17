@@ -22,6 +22,7 @@ interface SidebarProps {
   onRetryEngine: () => void
   isDark: boolean
   onToggleTheme: () => void
+  reviewCount?: number
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -30,12 +31,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   engineStatus,
   onRetryEngine,
   isDark,
-  onToggleTheme
+  onToggleTheme,
+  reviewCount = 0
 }) => {
   const topNavItems = [
-    { id: 'inbox', label: '수집함', icon: Inbox, count: 0 },
+    { id: 'inbox', label: '수집함', icon: Inbox },
     { id: 'today', label: '오늘', icon: Star },
-    { id: 'review', label: '검토 필요', icon: AlertCircle },
+    { id: 'review', label: '검토 필요', icon: AlertCircle, count: reviewCount },
     { id: 'library', label: '라이브러리', icon: BookOpen },
     { id: 'logbook', label: '기록', icon: Calendar }
   ]

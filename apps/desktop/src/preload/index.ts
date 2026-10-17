@@ -20,6 +20,7 @@ export interface ConversionRecord {
   library_path: string
   status?: string
   quality_score?: number | null
+  profile?: string
   markdown?: string
   exported_json?: string
   created_at?: string
@@ -29,13 +30,15 @@ export interface MarkFlowApi {
   getEngineStatus: () => Promise<EngineStatus>
   restartEngine: () => Promise<EngineStatus>
   onEngineStatusChange: (callback: (status: EngineStatus) => void) => () => void
-  convertDocument: (filePath: string, libraryDir?: string) => Promise<any>
+  convertDocument: (filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) => Promise<any>
   selectFilesOrFolders: () => Promise<{ path: string; name: string; size: number }[]>
-  getHistory: (params?: { search?: string; sort?: 'latest' | 'name' }) => Promise<ConversionRecord[]>
+  getHistory: (params?: { search?: string; sort?: 'latest' | 'name'; reviewOnly?: boolean }) => Promise<ConversionRecord[]>
+  getReviewCount: () => Promise<number>
   deleteHistoryItem: (id: number) => Promise<ConversionRecord | null>
   restoreHistoryItem: (id: number) => Promise<ConversionRecord | null>
   showItemInFolder: (path: string) => Promise<boolean>
   copyToClipboard: (text: string) => Promise<boolean>
+  getAssetDataUrl: (relPath: string) => Promise<string | null>
 }
 
 const api: MarkFlowApi = {
@@ -48,14 +51,16 @@ const api: MarkFlowApi = {
       ipcRenderer.removeListener('engine:status-changed', subscription)
     }
   },
-  convertDocument: (filePath: string, libraryDir?: string) =>
-    ipcRenderer.invoke('engine:convert', filePath, libraryDir),
+  convertDocument: (filePath: string, libraryDir?: string, profile?: string, llmConfig?: any) =>
+    ipcRenderer.invoke('engine:convert', filePath, libraryDir, profile, llmConfig),
   selectFilesOrFolders: () => ipcRenderer.invoke('dialog:open-files'),
   getHistory: (params) => ipcRenderer.invoke('db:get-history', params),
+  getReviewCount: () => ipcRenderer.invoke('db:get-review-count'),
   deleteHistoryItem: (id: number) => ipcRenderer.invoke('db:delete-item', id),
   restoreHistoryItem: (id: number) => ipcRenderer.invoke('db:restore-item', id),
   showItemInFolder: (path: string) => ipcRenderer.invoke('shell:show-item', path),
-  copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text)
+  copyToClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
+  getAssetDataUrl: (relPath: string) => ipcRenderer.invoke('library:get-asset-data-url', relPath)
 }
 
 try {

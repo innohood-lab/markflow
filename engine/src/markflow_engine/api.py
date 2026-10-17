@@ -24,6 +24,8 @@ app.add_middleware(
 class ConvertRequest(BaseModel):
     file_path: str
     library_dir: Optional[str] = None
+    profile: Optional[str] = "balanced"
+    llm_config: Optional[dict] = None
 
 
 def get_markitdown_version() -> str:
@@ -49,4 +51,9 @@ def health():
 
 @app.post("/convert")
 def convert(request: ConvertRequest):
-    return convert_document(file_path=request.file_path, library_dir_str=request.library_dir)
+    return convert_document(
+        file_path=request.file_path,
+        library_dir_str=request.library_dir,
+        profile=request.profile or "balanced",
+        llm_config_dict=request.llm_config,
+    )

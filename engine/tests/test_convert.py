@@ -58,7 +58,8 @@ def test_convert_samples_batch(tmp_path):
             assert "source_type:" in content
             assert "converted_at:" in content
             assert "engine:" in content
-            assert "status: \"미분류\"" in content
+            assert "quality_score:" in content
+            assert "status:" in content
             supported_count += 1
 
     assert supported_count >= 8
