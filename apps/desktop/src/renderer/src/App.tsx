@@ -11,6 +11,7 @@ import { ExportProgressModal } from './components/ExportProgressModal'
 import { BoardView } from './components/board/BoardView'
 import { TodayView } from './components/TodayView'
 import { LogbookView } from './components/LogbookView'
+import { HighlightsView } from './components/HighlightsView'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus } from 'lucide-react'
 
@@ -357,6 +358,26 @@ export const App: React.FC = () => {
     }
   }
 
+  // Navigate to document by title or slug (Wiki Link & Backlink handler)
+  const handleNavigateDocument = useCallback(async (target: string) => {
+    if (!window.markflowApi?.getBoardDocuments) return
+    try {
+      const res = await window.markflowApi.getBoardDocuments({ limit: 200 })
+      if (res && res.items) {
+        const found = res.items.find(
+          (d: any) =>
+            d.slug.toLowerCase() === target.toLowerCase() ||
+            (d.title && d.title.toLowerCase() === target.toLowerCase())
+        )
+        if (found) {
+          setDetailViewItem(found)
+        }
+      }
+    } catch (err) {
+      console.warn('[App] Error navigating to document:', err)
+    }
+  }, [])
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       {/* 1. Left Sidebar (Things style) */}
@@ -391,6 +412,7 @@ export const App: React.FC = () => {
               setDetailViewItem(null)
             }}
             onExportSingle={(id, target) => handleExport(target, [id])}
+            onNavigateDocument={handleNavigateDocument}
           />
         ) : (
           <>
@@ -471,6 +493,11 @@ export const App: React.FC = () => {
                         <MarkdownPreview
                           item={selectedItem}
                           onDelete={handleDeleteItem}
+                          onNavigateDocument={handleNavigateDocument}
+                          onDocumentUpdated={(newMd) => {
+                            setSelectedItem({ ...selectedItem, markdown: newMd })
+                            loadHistory()
+                          }}
                         />
                       </div>
                     )}
@@ -482,6 +509,8 @@ export const App: React.FC = () => {
                 onOpenDetail={(item) => setDetailViewItem(item)}
                 onExport={(target, ids) => handleExport(target, ids)}
               />
+            ) : currentView === 'highlights' ? (
+              <HighlightsView onNavigateDocument={handleNavigateDocument} />
             ) : currentView === 'logbook' ? (
               <LogbookView onUndoDelete={handleUndoDelete} />
             ) : currentView === 'library' ? (

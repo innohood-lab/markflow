@@ -14,7 +14,8 @@ import {
   Save,
   Check,
   RotateCw,
-  X
+  X,
+  Link as LinkIcon
 } from 'lucide-react'
 
 interface MarkdownEditorProps {
@@ -31,6 +32,29 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Wiki Link Autocomplete State
+  const [docSuggestions, setDocSuggestions] = useState<{ title: string; slug: string }[]>([])
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false)
+  const [autocompleteQuery, setAutocompleteQuery] = useState('')
+  const [autocompleteIndex, setAutocompleteIndex] = useState(0)
+  const [wikiMatchStart, setWikiMatchStart] = useState<number>(-1)
+
+  // Fetch document suggestions for wiki linking
+  useEffect(() => {
+    if (window.markflowApi?.getBoardDocuments) {
+      window.markflowApi.getBoardDocuments({ limit: 100 }).then((res) => {
+        if (res && res.items) {
+          setDocSuggestions(
+            res.items.map((it: any) => ({
+              title: it.title || it.slug,
+              slug: it.slug
+            }))
+          )
+        }
+      }).catch(() => {})
+    }
+  }, [])
 
   // Update content if initialContent changes externally (e.g. reconvert)
   useEffect(() => {
@@ -55,10 +79,53 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
     [onSave]
   )
 
+  const checkWikiLinkTrigger = (text: string, cursorPos: number) => {
+    // Check if cursor is right after [[query
+    const textBeforeCursor = text.substring(0, cursorPos)
+    const match = /(?:^|[^\w\[])\[\[([^\]\n]*)$/.exec(textBeforeCursor)
+    if (match) {
+      const query = match[1]
+      const startIdx = cursorPos - query.length - 2
+      setWikiMatchStart(startIdx)
+      setAutocompleteQuery(query)
+      setAutocompleteOpen(true)
+      setAutocompleteIndex(0)
+    } else {
+      setAutocompleteOpen(false)
+    }
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value
+    const cursorPos = e.target.selectionStart
     setContent(newText)
     triggerAutoSave(newText)
+    checkWikiLinkTrigger(newText, cursorPos)
+  }
+
+  const filteredSuggestions = docSuggestions.filter((doc) =>
+    doc.title.toLowerCase().includes(autocompleteQuery.toLowerCase())
+  )
+
+  const insertWikiLink = (docTitle: string) => {
+    const textarea = textareaRef.current
+    if (!textarea || wikiMatchStart === -1) return
+
+    const cursorPos = textarea.selectionStart
+    const before = content.substring(0, wikiMatchStart)
+    const after = content.substring(cursorPos)
+    const completedLink = `[[${docTitle}]]`
+    const newContent = before + completedLink + after
+
+    setContent(newContent)
+    triggerAutoSave(newContent)
+    setAutocompleteOpen(false)
+
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = before.length + completedLink.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 10)
   }
 
   // Immediate manual save (Ctrl+S / Cmd+S)
@@ -74,6 +141,29 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (autocompleteOpen && filteredSuggestions.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setAutocompleteIndex((prev) => (prev + 1) % filteredSuggestions.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setAutocompleteIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length)
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          insertWikiLink(filteredSuggestions[autocompleteIndex].title)
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setAutocompleteOpen(false)
+          return
+        }
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         handleManualSave()
@@ -85,7 +175,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleManualSave])
+  }, [autocompleteOpen, filteredSuggestions, autocompleteIndex, handleManualSave])
 
   // Insert markdown helpers
   const insertText = (prefix: string, suffix: string = '') => {
@@ -274,15 +364,43 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
       )}
 
       {/* Editor Body */}
-      <div className="flex-1 p-6 overflow-hidden flex flex-col">
+      <div className="flex-1 p-6 overflow-hidden flex flex-col relative">
         <textarea
           ref={textareaRef}
           value={content}
           onChange={handleChange}
-          placeholder="여기에 마크다운 내용을 입력하거나 수정하세요..."
+          placeholder="여기에 마크다운 내용을 입력하거나 수정하세요... [[ 로 다른 문서를 링크할 수 있습니다."
           className="flex-1 w-full h-full resize-none font-mono text-sm leading-relaxed bg-transparent border-0 focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground/60 select-text"
           spellCheck={false}
         />
+
+        {/* Wiki Link Autocomplete Suggestions Popup */}
+        {autocompleteOpen && filteredSuggestions.length > 0 && (
+          <div className="absolute bottom-6 left-6 max-h-60 w-80 bg-popover/95 backdrop-blur-md border border-border rounded-xl shadow-float overflow-y-auto z-30 p-1.5 animate-in fade-in zoom-in-95 duration-100">
+            <div className="px-2.5 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 border-b border-border/50 mb-1">
+              <LinkIcon className="w-3 h-3 text-primary" />
+              <span>위키 링크할 문서 선택 (Enter)</span>
+            </div>
+            {filteredSuggestions.map((doc, idx) => (
+              <button
+                key={doc.slug}
+                type="button"
+                onClick={() => insertWikiLink(doc.title)}
+                onMouseEnter={() => setAutocompleteIndex(idx)}
+                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                  idx === autocompleteIndex
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'text-foreground hover:bg-muted'
+                }`}
+              >
+                <span className="truncate">{doc.title}</span>
+                <span className={`text-[10px] ml-2 shrink-0 ${idx === autocompleteIndex ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                  [[{doc.title}]]
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

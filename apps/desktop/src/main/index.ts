@@ -45,6 +45,13 @@ import {
   deleteSmartGroup,
   toggleStarDocument
 } from './services/smartGroupService'
+import {
+  findBacklinks,
+  renameWikiLinkReferences,
+  addHighlightToDocument,
+  addFootnoteNoteToDocument,
+  getAllHighlights
+} from './services/wikiLinkService'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
@@ -590,6 +597,27 @@ ipcMain.handle('smart-group:delete', (_event, id: string) => {
 
 ipcMain.handle('doc:toggle-star', (_event, id: number) => {
   return toggleStarDocument(id)
+})
+
+// IPC Handlers: Phase 8-(나) Wiki Links, Backlinks, Highlights
+ipcMain.handle('wiki:get-backlinks', (_event, targetTitle: string, targetSlug: string) => {
+  return findBacklinks(targetTitle, targetSlug, getLibraryDir())
+})
+
+ipcMain.handle('wiki:rename-references', (_event, oldTitle: string, newTitle: string) => {
+  return renameWikiLinkReferences(oldTitle, newTitle, getLibraryDir())
+})
+
+ipcMain.handle('wiki:add-highlight', (_event, filePath: string, selectedText: string) => {
+  return addHighlightToDocument(filePath, selectedText)
+})
+
+ipcMain.handle('wiki:add-note', (_event, filePath: string, selectedText: string, noteText: string) => {
+  return addFootnoteNoteToDocument(filePath, selectedText, noteText)
+})
+
+ipcMain.handle('wiki:get-all-highlights', () => {
+  return getAllHighlights(getLibraryDir())
 })
 
 app.whenReady().then(async () => {

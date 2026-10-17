@@ -150,6 +150,13 @@ export interface MarkFlowApi {
   saveSmartGroup: (group: { name: string; query: string; icon?: string }) => Promise<any[]>
   deleteSmartGroup: (id: string) => Promise<any[]>
   toggleStarDocument: (id: number) => Promise<any>
+
+  // Phase 8-(나): Wiki Links & Backlinks & Highlights
+  getBacklinks: (targetTitle: string, targetSlug: string) => Promise<any[]>
+  renameWikiReferences: (oldTitle: string, newTitle: string) => Promise<{ updatedFilesCount: number }>
+  addHighlight: (filePath: string, selectedText: string) => Promise<{ success: boolean; markdown?: string; error?: string }>
+  addFootnoteNote: (filePath: string, selectedText: string, noteText: string) => Promise<{ success: boolean; markdown?: string; error?: string }>
+  getAllHighlights: () => Promise<any[]>
 }
 
 const api: MarkFlowApi = {
@@ -227,7 +234,16 @@ const api: MarkFlowApi = {
   getSmartGroups: () => ipcRenderer.invoke('smart-group:get-all'),
   saveSmartGroup: (group) => ipcRenderer.invoke('smart-group:save', group),
   deleteSmartGroup: (id) => ipcRenderer.invoke('smart-group:delete', id),
-  toggleStarDocument: (id) => ipcRenderer.invoke('doc:toggle-star', id)
+  toggleStarDocument: (id) => ipcRenderer.invoke('doc:toggle-star', id),
+
+  // Phase 8-(나): Wiki Links & Backlinks & Highlights methods
+  getBacklinks: (targetTitle, targetSlug) => ipcRenderer.invoke('wiki:get-backlinks', targetTitle, targetSlug),
+  renameWikiReferences: (oldTitle, newTitle) =>
+    ipcRenderer.invoke('wiki:rename-references', oldTitle, newTitle),
+  addHighlight: (filePath, selectedText) => ipcRenderer.invoke('wiki:add-highlight', filePath, selectedText),
+  addFootnoteNote: (filePath, selectedText, noteText) =>
+    ipcRenderer.invoke('wiki:add-note', filePath, selectedText, noteText),
+  getAllHighlights: () => ipcRenderer.invoke('wiki:get-all-highlights')
 }
 
 try {

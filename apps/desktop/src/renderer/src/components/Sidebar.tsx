@@ -15,7 +15,8 @@ import {
   Plus,
   Trash2,
   Share2,
-  Layers
+  Layers,
+  Highlighter
 } from 'lucide-react'
 import { EngineStatus } from '../../../preload'
 import { EngineStatusDot } from './EngineStatusDot'
@@ -95,6 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'today', label: '오늘', icon: Star },
     { id: 'review', label: '검토 필요', icon: AlertCircle, count: reviewCount },
     { id: 'library', label: '라이브러리', icon: BookOpen },
+    { id: 'highlights', label: '하이라이트 모음', icon: Highlighter },
     { id: 'logbook', label: '기록', icon: Calendar }
   ]
 
