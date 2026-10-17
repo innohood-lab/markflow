@@ -74,7 +74,7 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
     setIsDragOver(false)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
@@ -82,8 +82,32 @@ export const QueueSection: React.FC<QueueSectionProps> = ({
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
 
+    const rawPaths = files
+      .map((f) => {
+        if (window.markflowApi?.getPathForFile) {
+          return window.markflowApi.getPathForFile(f)
+        }
+        return (f as any).path || ''
+      })
+      .filter(Boolean)
+
+    if (rawPaths.length > 0 && window.markflowApi?.resolveDroppedPaths) {
+      try {
+        const resolved = await window.markflowApi.resolveDroppedPaths(rawPaths)
+        if (resolved && resolved.length > 0) {
+          onAddFiles(resolved)
+          return
+        }
+      } catch (err) {
+        console.warn('[QueueSection] Failed to resolve dropped paths:', err)
+      }
+    }
+
     const fileList = files.map((f) => ({
-      path: (f as any).path || f.name,
+      path:
+        (window.markflowApi?.getPathForFile ? window.markflowApi.getPathForFile(f) : '') ||
+        (f as any).path ||
+        f.name,
       name: f.name,
       size: f.size
     }))

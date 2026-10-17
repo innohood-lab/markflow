@@ -1,8 +1,18 @@
-import { app } from 'electron'
 import { spawn, exec, ChildProcess } from 'child_process'
 import * as net from 'net'
 import * as path from 'path'
 import * as crypto from 'crypto'
+import { createRequire } from 'module'
+
+const nodeRequire = createRequire(import.meta.url)
+const app: any = (() => {
+  if (!process.versions?.electron) return null
+  try {
+    return nodeRequire('electron')?.app ?? null
+  } catch {
+    return null
+  }
+})()
 
 export interface EngineStatus {
   state: 'starting' | 'ready' | 'error' | 'stopped'
@@ -98,34 +108,54 @@ export class SidecarManager {
 
       console.log(`[Sidecar] Selected dynamic port: ${this.port}`)
 
-      // Determine command and args
-      const isPackaged = app.isPackaged
+      const isPackaged = app?.isPackaged ?? false
       let cmd: string
       let args: string[]
       let cwd: string
 
       if (!isPackaged) {
-        // Development mode: run via uv run uvicorn
+        // Development mode: prefer engine/.venv python directly for fast, reliable startup, fallback to uv
         const fs = await import('fs')
+        const appPath = app?.getAppPath ? app.getAppPath() : process.cwd()
         const candidates = [
-          path.resolve(app.getAppPath(), '../../engine'),
-          path.resolve(app.getAppPath(), '../engine'),
+          path.resolve(appPath, '../../engine'),
+          path.resolve(appPath, '../engine'),
           path.resolve(process.cwd(), 'engine'),
           path.resolve(__dirname, '../../../../engine')
         ]
         cwd = candidates.find((p) => fs.existsSync(p)) || candidates[0]
-        cmd = 'uv'
-        args = [
-          'run',
-          'uvicorn',
-          'markflow_engine.api:app',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          this.port.toString(),
-          '--log-level',
-          'warning'
-        ]
+        const venvPython =
+          process.platform === 'win32'
+            ? path.join(cwd, '.venv', 'Scripts', 'python.exe')
+            : path.join(cwd, '.venv', 'bin', 'python')
+
+        if (fs.existsSync(venvPython)) {
+          cmd = venvPython
+          args = [
+            '-m',
+            'uvicorn',
+            'markflow_engine.api:app',
+            '--host',
+            '127.0.0.1',
+            '--port',
+            this.port.toString(),
+            '--log-level',
+            'warning'
+          ]
+        } else {
+          cmd = 'uv'
+          args = [
+            'run',
+            'uvicorn',
+            'markflow_engine.api:app',
+            '--host',
+            '127.0.0.1',
+            '--port',
+            this.port.toString(),
+            '--log-level',
+            'warning'
+          ]
+        }
       } else {
         // Production mode: run packaged executable
         const exeName = process.platform === 'win32' ? 'markflow-engine.exe' : 'markflow-engine'
@@ -298,6 +328,21 @@ export class SidecarManager {
   }
 
   /**
+   * Wait until engine transitions out of 'starting' state (up to timeoutMs)
+   */
+  public async waitForReady(timeoutMs: number = 15000): Promise<boolean> {
+    if (this.currentStatus.state === 'ready') return true
+    if (this.currentStatus.state === 'stopped' || this.currentStatus.state === 'error') {
+      await this.start().catch(() => {})
+    }
+    const startTime = Date.now()
+    while (this.currentStatus.state === 'starting' && Date.now() - startTime < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    return this.currentStatus.state === 'ready'
+  }
+
+  /**
    * Send document conversion request to Python FastAPI sidecar
    */
   public async convertDocument(
@@ -306,15 +351,21 @@ export class SidecarManager {
     profile: string = 'balanced',
     llmConfig?: any
   ): Promise<any> {
-    if (!this.port || this.status.state !== 'ready') {
-      return {
-        status: 'error',
-        message: '변환 엔진이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.',
-        file_path: filePath
-      }
-    }
-
     try {
+      if (this.currentStatus.state === 'starting') {
+        await this.waitForReady(15000)
+      }
+
+      if (!this.port || this.currentStatus.state !== 'ready') {
+        return {
+          status: 'error',
+          message:
+            this.currentStatus.error ||
+            '변환 엔진이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.',
+          file_path: filePath
+        }
+      }
+
       const url = `http://127.0.0.1:${this.port}/convert`
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (this.secret) {
@@ -357,8 +408,10 @@ export class SidecarManager {
       this.stop().catch(() => {})
     }
 
-    app.on('before-quit', cleanup)
-    app.on('will-quit', cleanup)
+    if (app && typeof app.on === 'function') {
+      app.on('before-quit', cleanup)
+      app.on('will-quit', cleanup)
+    }
     process.on('exit', cleanup)
     process.on('SIGINT', cleanup)
     process.on('SIGTERM', cleanup)

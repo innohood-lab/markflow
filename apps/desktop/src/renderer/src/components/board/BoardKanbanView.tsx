@@ -51,7 +51,7 @@ const COLUMNS: ColumnDef[] = [
     id: 'ready',
     title: '완료',
     icon: CheckCircle2,
-    statusMatch: (s) => s === 'ready' || s === 'exported',
+    statusMatch: (s) => s === 'ready' || s === 'exported' || s === 'done',
     targetStatus: 'ready',
     headerBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     dotColor: 'bg-emerald-500'

@@ -25,12 +25,51 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const [noteInputOpen, setNoteInputOpen] = useState(false)
   const [noteContent, setNoteContent] = useState('')
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null)
+  const [assetUrls, setAssetUrls] = useState<Record<string, string>>({})
 
   const contentAreaRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setCurrentMarkdown(item?.markdown || '')
   }, [item?.markdown])
+
+  useEffect(() => {
+    let active = true
+    const md = currentMarkdown || ''
+    const imgRegex = /!\[[^\]]*\]\(([^)]+)\)/g
+    const pathsToResolve: string[] = []
+    let m: RegExpExecArray | null
+    while ((m = imgRegex.exec(md)) !== null) {
+      const src = m[1].trim()
+      if (src.startsWith('assets/') && !assetUrls[src]) {
+        pathsToResolve.push(src)
+      }
+    }
+    if (pathsToResolve.length > 0 && window.markflowApi?.getAssetDataUrl) {
+      Promise.all(
+        pathsToResolve.map(async (relPath) => {
+          try {
+            const url = await window.markflowApi.getAssetDataUrl(relPath)
+            return [relPath, url] as const
+          } catch {
+            return [relPath, null] as const
+          }
+        })
+      ).then((entries) => {
+        if (!active) return
+        const next: Record<string, string> = {}
+        for (const [k, v] of entries) {
+          if (v) next[k] = v
+        }
+        if (Object.keys(next).length > 0) {
+          setAssetUrls((prev) => ({ ...prev, ...next }))
+        }
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [currentMarkdown])
 
   if (!item) {
     return (
@@ -135,20 +174,43 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // Interactive parser for [[Wiki Links]] and ==Highlights==
+  // Interactive parser for [[Wiki Links]], ==Highlights==, [^Footnotes], and ![Images](src)
   const renderInteractiveMarkdown = (text: string) => {
     if (!text) return null
     // Tokenize lines
     const lines = text.split('\n')
     return lines.map((line, lineIdx) => {
-      // Regex tokens: [[Wiki Link]] or ==Highlight==
-      const tokenRegex = /(\[\[[^\]]+\]\]|==[^=]+==|\[\^[^\]]+\])/g
+      // Regex tokens: ![alt](src), [[Wiki Link]], ==Highlight==, or [^Footnote]
+      const tokenRegex = /(!\[[^\]]*\]\([^)]+\)|\[\[[^\]]+\]\]|==[^=]+==|\[\^[^\]]+\])/g
       const parts = line.split(tokenRegex)
 
       return (
         <React.Fragment key={lineIdx}>
           {parts.map((part, pIdx) => {
-            if (part.startsWith('[[') && part.endsWith(']]')) {
+            if (part.startsWith('![') && part.includes('](') && part.endsWith(')')) {
+              const match = part.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
+              if (match) {
+                const altText = match[1] || '추출된 이미지'
+                const rawSrc = match[2].trim()
+                const resolvedSrc = assetUrls[rawSrc] || (rawSrc.startsWith('data:') || rawSrc.startsWith('http') ? rawSrc : null)
+                if (resolvedSrc) {
+                  return (
+                    <span key={pIdx} className="block my-3">
+                      <img
+                        src={resolvedSrc}
+                        alt={altText}
+                        className="max-w-full max-h-[420px] rounded-xl border border-border/70 shadow-subtle object-contain bg-card"
+                      />
+                      {altText && (
+                        <span className="block text-[11px] text-muted-foreground mt-1">
+                          {altText}
+                        </span>
+                      )}
+                    </span>
+                  )
+                }
+              }
+            } else if (part.startsWith('[[') && part.endsWith(']]')) {
               const rawInner = part.slice(2, -2)
               const [target, alias] = rawInner.split('|')
               const displayText = alias ? alias.trim() : target.trim()

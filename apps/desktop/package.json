@@ -5,9 +5,9 @@
   "main": "./out/main/index.js",
   "author": "Kyujin Park <innohood@gmail.com>",
   "scripts": {
-    "dev": "electron-vite dev --watch",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "dev": "electron-vite dev --watch -c electron-vite.config.ts",
+    "build": "electron-vite build -c electron-vite.config.ts",
+    "preview": "electron-vite preview -c electron-vite.config.ts",
     "test": "vitest run",
     "build:unpack": "electron-builder --dir",
     "dist": "electron-builder",

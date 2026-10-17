@@ -1,6 +1,16 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { app, shell } from 'electron'
+import { createRequire } from 'module'
+
+const nodeRequire = createRequire(import.meta.url)
+function getElectron(): { app?: any; shell?: any } | null {
+  if (!process.versions?.electron) return null
+  try {
+    return nodeRequire('electron')
+  } catch {
+    return null
+  }
+}
 
 export function maskSensitiveData(input: string): string {
   if (!input) return ''
@@ -49,8 +59,9 @@ export class LoggerService {
 
     let baseDir = ''
     try {
-      if (app && typeof app.getPath === 'function') {
-        baseDir = app.getPath('userData')
+      const electron = getElectron()
+      if (electron?.app && typeof electron.app.getPath === 'function') {
+        baseDir = electron.app.getPath('userData')
       }
     } catch {
       // Fallback if app is not initialized yet or in test runner
@@ -184,8 +195,9 @@ export class LoggerService {
    */
   public async openLogFolder(): Promise<string> {
     const logDir = this.getLogDir()
-    if (shell && typeof shell.openPath === 'function') {
-      await shell.openPath(logDir)
+    const electron = getElectron()
+    if (electron?.shell && typeof electron.shell.openPath === 'function') {
+      await electron.shell.openPath(logDir)
     }
     return logDir
   }

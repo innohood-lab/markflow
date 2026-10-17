@@ -58,13 +58,15 @@ export const FrontmatterForm: React.FC<FrontmatterFormProps> = ({
             <span>상태</span>
           </div>
           <select
-            value={data.status || 'inbox'}
+            value={data.status === 'done' ? 'ready' : (data.status || 'inbox')}
             onChange={(e) => onChange({ ...data, status: e.target.value })}
             className="flex-1 bg-card border border-border/80 rounded-md px-2 py-1 text-xs text-foreground cursor-pointer focus:outline-none focus:border-primary font-medium shadow-subtle"
           >
             <option value="inbox">📥 수집함 (Inbox)</option>
-            <option value="review_needed">⚠ 검토 필요</option>
-            <option value="done">✓ 완료 (Done)</option>
+            <option value="review_needed">⚠ 검토 필요 (Review)</option>
+            <option value="ready">✓ 준비 완료 (Ready)</option>
+            <option value="exported">📤 내보냄 (Exported)</option>
+            <option value="archived">📦 보관됨 (Archived)</option>
           </select>
         </div>
 

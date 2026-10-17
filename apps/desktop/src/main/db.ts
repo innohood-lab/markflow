@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -6,7 +5,58 @@ import { createRequire } from 'module'
 import { parseSearchQuery, buildSqlFilterFromQuery } from './services/searchQueryParser'
 
 const nodeRequire = createRequire(import.meta.url)
-const Database = nodeRequire('better-sqlite3')
+
+function getElectronApp(): any | null {
+  if (!process.versions?.electron) return null
+  try {
+    return nodeRequire('electron')?.app ?? null
+  } catch {
+    return null
+  }
+}
+
+function createSqliteInstance(dbPath: string): any {
+  try {
+    const BetterSqlite3 = nodeRequire('better-sqlite3')
+    return new BetterSqlite3(dbPath)
+  } catch (err) {
+    console.warn('[DB] better-sqlite3 unavailable or ABI mismatch, falling back to node:sqlite:', (err as any)?.message)
+    const { DatabaseSync } = nodeRequire('node:sqlite')
+    const rawDb = new DatabaseSync(dbPath)
+    return {
+      pragma(stmt: string) {
+        const res = rawDb.prepare(`PRAGMA ${stmt}`).all()
+        return res
+      },
+      exec(sql: string) {
+        return rawDb.exec(sql)
+      },
+      prepare(sql: string) {
+        const stmt = rawDb.prepare(sql)
+        if (typeof stmt.setAllowBareNamedParameters === 'function') {
+          stmt.setAllowBareNamedParameters(true)
+        }
+        return stmt
+      },
+      transaction(fn: (...args: any[]) => any) {
+        return (...args: any[]) => {
+          rawDb.exec('BEGIN')
+          try {
+            const result = fn(...args)
+            rawDb.exec('COMMIT')
+            return result
+          } catch (txErr) {
+            rawDb.exec('ROLLBACK')
+            throw txErr
+          }
+        }
+      },
+      close() {
+        return rawDb.close()
+      }
+    }
+  }
+}
 
 export interface ConversionRecord {
   id?: number
@@ -37,13 +87,14 @@ export interface ConversionRecord {
   created_at?: string
 }
 
-let db: Database.Database | null = null
+let db: any | null = null
 
-export function getDatabase(): Database.Database {
+export function getDatabase(): any {
   if (db) return db
 
-  const userDataPath = app?.getPath
-    ? app.getPath('userData')
+  const electronApp = getElectronApp()
+  const userDataPath = electronApp?.getPath
+    ? electronApp.getPath('userData')
     : path.join(os.tmpdir(), 'markflow-test-userdata')
   if (!fs.existsSync(userDataPath)) {
     fs.mkdirSync(userDataPath, { recursive: true })
@@ -52,7 +103,7 @@ export function getDatabase(): Database.Database {
   const dbPath = path.join(userDataPath, 'markflow.db')
   console.log(`[DB] Initializing SQLite database at: ${dbPath}`)
 
-  db = new Database(dbPath)
+  db = createSqliteInstance(dbPath)
   db.pragma('journal_mode = WAL')
 
   // 1. Create base tables

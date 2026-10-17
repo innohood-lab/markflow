@@ -24,9 +24,13 @@ export default defineConfig({
     }
   },
   renderer: {
+    root: resolve(__dirname, 'src/renderer'),
+    css: {
+      postcss: resolve(__dirname, 'postcss.config.js')
+    },
     resolve: {
       alias: {
-        '@': resolve('src/renderer/src')
+        '@': resolve(__dirname, 'src/renderer/src')
       }
     },
     plugins: [react()],

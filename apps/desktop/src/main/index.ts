@@ -10,7 +10,8 @@ import {
   deleteConversion,
   restoreConversion,
   updateConversion,
-  getConversionById
+  getConversionById,
+  getExportLogs
 } from './db'
 import {
   loadSettings,
@@ -187,7 +188,28 @@ ipcMain.handle(
       }
     } catch {}
 
-    const result = await sidecar.convertDocument(filePath, libraryDir, profile || 'balanced', llmConfig)
+    const settings = loadSettings(true)
+    const effectiveLibraryDir = libraryDir || getLibraryDir()
+    const effectiveProfile = profile || settings.conversion?.defaultProfile || 'balanced'
+    let effectiveLlmConfig = llmConfig
+    if (
+      !effectiveLlmConfig &&
+      settings.conversion?.llmProvider &&
+      settings.conversion.llmProvider !== 'none'
+    ) {
+      effectiveLlmConfig = {
+        provider: settings.conversion.llmProvider,
+        model: settings.conversion.llmModel || undefined,
+        api_key: settings.conversion.llmApiKey || undefined
+      }
+    }
+
+    const result = await sidecar.convertDocument(
+      filePath,
+      effectiveLibraryDir,
+      effectiveProfile,
+      effectiveLlmConfig
+    )
     if (result.status === 'success') {
       let finalMarkdown = result.markdown
       if (sourceLocation && result.library_path && fs.existsSync(result.library_path)) {
@@ -213,20 +235,28 @@ ipcMain.handle(
         library_path: result.library_path,
         status: result.quality_report?.review_needed ? 'review_needed' : 'inbox',
         quality_score: result.quality_score ?? null,
-        profile: result.profile || profile || 'balanced',
+        profile: result.profile || effectiveProfile,
         markdown: finalMarkdown
       })
 
       // Auto-export if enabled in settings
       try {
-        const settings = loadSettings(true)
-        if (settings.autoExport.enabled && settings.autoExport.target !== 'none') {
-          const docs = [record]
+        const docs = [record]
+        if (settings.autoExport?.enabled && (settings.autoExport.target as string) !== 'none') {
           if (settings.autoExport.target === 'github' || settings.autoExport.target === 'both') {
             exportDocumentsToGitHub(docs).catch((e) => console.error('[AutoExport] GitHub export failed:', e))
           }
           if (settings.autoExport.target === 'obsidian' || settings.autoExport.target === 'both') {
             exportDocumentsToObsidian(docs).catch((e) => console.error('[AutoExport] Obsidian export failed:', e))
+          }
+        }
+        if (Array.isArray(settings.cloudDestinations)) {
+          for (const dest of settings.cloudDestinations) {
+            if (dest.autoSave && dest.id) {
+              exportDocumentsToCloudDestination(dest.id, docs).catch((e) =>
+                console.error(`[AutoExport] Cloud destination (${dest.name}) export failed:`, e)
+              )
+            }
           }
         }
       } catch (err) {
@@ -242,6 +272,10 @@ ipcMain.handle(
 // IPC Handlers: Database
 ipcMain.handle('db:get-history', (_event, params) => {
   return getConversions(params)
+})
+
+ipcMain.handle('db:get-export-logs', (_event, limit?: number) => {
+  return getExportLogs(limit || 50)
 })
 
 ipcMain.handle('db:get-review-count', () => {
@@ -289,8 +323,8 @@ ipcMain.handle(
   async (_event, id: number, sourcePath: string, libraryPath: string, slug: string, profile: string) => {
     try {
       // 1. Backup existing markdown to Library/.history/
-      const home = app.getPath('documents')
-      const historyDir = join(home, 'MarkFlow', 'Library', '.history')
+      const libDir = getLibraryDir()
+      const historyDir = join(libDir, '.history')
       if (!fs.existsSync(historyDir)) {
         fs.mkdirSync(historyDir, { recursive: true })
       }
@@ -301,7 +335,19 @@ ipcMain.handle(
       }
 
       // 2. Run sidecar reconversion
-      const res = await sidecar.convertDocument(sourcePath, undefined, profile)
+      const settings = loadSettings(true)
+      let effectiveLlmConfig: any = undefined
+      if (
+        settings.conversion?.llmProvider &&
+        settings.conversion.llmProvider !== 'none'
+      ) {
+        effectiveLlmConfig = {
+          provider: settings.conversion.llmProvider,
+          model: settings.conversion.llmModel || undefined,
+          api_key: settings.conversion.llmApiKey || undefined
+        }
+      }
+      const res = await sidecar.convertDocument(sourcePath, libDir, profile, effectiveLlmConfig)
       if (res.status === 'success') {
         const updated = updateConversion(id, {
           markdown: res.markdown,
@@ -320,11 +366,20 @@ ipcMain.handle(
 
 ipcMain.handle('library:get-asset-data-url', async (_event, relPath: string) => {
   try {
-    const home = app.getPath('documents')
-    const fullPath = join(home, 'MarkFlow', 'Library', relPath)
+    const libDir = getLibraryDir()
+    const fullPath = join(libDir, relPath)
     if (fs.existsSync(fullPath)) {
       const ext = extname(fullPath).toLowerCase().replace('.', '')
-      const mime = ext === 'png' ? 'image/png' : (ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png')
+      const mime =
+        ext === 'png'
+          ? 'image/png'
+          : ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : ext === 'webp'
+              ? 'image/webp'
+              : ext === 'gif'
+                ? 'image/gif'
+                : 'image/png'
       const data = fs.readFileSync(fullPath).toString('base64')
       return `data:${mime};base64,${data}`
     }
@@ -361,19 +416,11 @@ ipcMain.handle('shell:open-path', async (_event, filePath: string) => {
   }
   return '파일이 존재하지 않습니다.'
 })
-ipcMain.handle('dialog:open-files', async () => {
-  if (!mainWindow) return []
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: '변환할 문서 또는 폴더 선택',
-    properties: ['openFile', 'openDirectory', 'multiSelections']
-  })
 
-  if (result.canceled || result.filePaths.length === 0) {
-    return []
-  }
-
+function resolvePathsToFileEntries(filePaths: string[]): { path: string; name: string; size: number }[] {
   const allFiles: { path: string; name: string; size: number }[] = []
-  for (const p of result.filePaths) {
+  for (const p of filePaths) {
+    if (!p) continue
     try {
       const stat = fs.statSync(p)
       if (stat.isDirectory()) {
@@ -385,14 +432,35 @@ ipcMain.handle('dialog:open-files', async () => {
           } catch {}
         }
       } else if (stat.isFile()) {
-        allFiles.push({ path: p, name: p.split(/[\\/]/).pop() || '', size: stat.size })
+        const ext = extname(p).toLowerCase()
+        if (SUPPORTED_EXTS.has(ext)) {
+          allFiles.push({ path: p, name: p.split(/[\\/]/).pop() || '', size: stat.size })
+        }
       }
     } catch (err) {
       console.warn(`[Main] Error stat path ${p}:`, err)
     }
   }
-
   return allFiles
+}
+
+ipcMain.handle('dialog:resolve-paths', async (_event, filePaths: string[]) => {
+  if (!Array.isArray(filePaths) || filePaths.length === 0) return []
+  return resolvePathsToFileEntries(filePaths)
+})
+
+ipcMain.handle('dialog:open-files', async () => {
+  if (!mainWindow) return []
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '변환할 문서 또는 폴더 선택',
+    properties: ['openFile', 'openDirectory', 'multiSelections']
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return []
+  }
+
+  return resolvePathsToFileEntries(result.filePaths)
 })
 
 ipcMain.handle('shell:show-item', (_event, filePath: string) => {

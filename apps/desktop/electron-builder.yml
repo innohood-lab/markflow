@@ -6,7 +6,10 @@ directories:
   output: ../../dist
   buildResources: build
 
-npmRebuild: false
+npmRebuild: true
+
+asarUnpack:
+  - '**/*.node'
 
 files:
   - out/**/*

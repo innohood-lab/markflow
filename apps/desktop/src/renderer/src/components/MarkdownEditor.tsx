@@ -44,9 +44,10 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent, 
   useEffect(() => {
     if (window.markflowApi?.getBoardDocuments) {
       window.markflowApi.getBoardDocuments({ limit: 100 }).then((res) => {
-        if (res && res.items) {
+        const items = Array.isArray(res) ? res : (res as any)?.items || []
+        if (items.length > 0) {
           setDocSuggestions(
-            res.items.map((it: any) => ({
+            items.map((it: any) => ({
               title: it.title || it.slug,
               slug: it.slug
             }))

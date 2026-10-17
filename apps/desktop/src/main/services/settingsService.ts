@@ -1,9 +1,19 @@
-import { safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import { createRequire } from 'module'
 import { Octokit } from '@octokit/rest'
 import { getSetting, setSetting, ConversionRecord, updateConversion, logExport } from '../db'
+
+const nodeRequire = createRequire(import.meta.url)
+function getSafeStorage(): any | null {
+  if (!process.versions?.electron) return null
+  try {
+    return nodeRequire('electron')?.safeStorage ?? null
+  } catch {
+    return null
+  }
+}
 
 export interface CloudDestination {
   id: string
@@ -103,6 +113,7 @@ export const DEFAULT_SETTINGS: MarkFlowSettings = {
 export function encryptSecret(plainText: string): string {
   if (!plainText) return ''
   try {
+    const safeStorage = getSafeStorage()
     if (safeStorage && safeStorage.isEncryptionAvailable()) {
       const buffer = safeStorage.encryptString(plainText)
       return 'enc:' + buffer.toString('base64')
@@ -121,6 +132,7 @@ export function decryptSecret(cipherText: string): string {
   try {
     if (cipherText.startsWith('enc:')) {
       const buffer = Buffer.from(cipherText.slice(4), 'base64')
+      const safeStorage = getSafeStorage()
       if (safeStorage && safeStorage.isEncryptionAvailable()) {
         return safeStorage.decryptString(buffer)
       }

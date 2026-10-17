@@ -50,9 +50,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       setTimeout(() => inputRef.current?.focus(), 50)
       if (window.markflowApi?.getBoardDocuments) {
         window.markflowApi.getBoardDocuments({ limit: 150 }).then((res) => {
-          if (res && res.items) {
+          const items = Array.isArray(res) ? res : (res as any)?.items || []
+          if (items.length > 0) {
             setDocs(
-              res.items.map((it: any) => ({
+              items.map((it: any) => ({
                 title: it.title || it.slug,
                 slug: it.slug
               }))

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 export interface EngineStatus {
   state: 'starting' | 'ready' | 'error' | 'stopped'
@@ -30,6 +30,9 @@ export interface ConversionRecord {
   category?: string
   first_image?: string
   custom_json?: string
+  groups?: string[]
+  groups_json?: string
+  is_starred?: number
   is_deleted?: number
   created_at?: string
 }
@@ -46,6 +49,8 @@ export interface MarkFlowApi {
     sourceLocation?: string
   ) => Promise<any>
   selectFilesOrFolders: () => Promise<{ path: string; name: string; size: number }[]>
+  getPathForFile: (file: File) => string
+  resolveDroppedPaths: (paths: string[]) => Promise<{ path: string; name: string; size: number }[]>
   getHistory: (params?: {
     search?: string
     sort?: 'latest' | 'name' | 'score'
@@ -55,6 +60,7 @@ export interface MarkFlowApi {
     tag?: string
     includeArchived?: boolean
   }) => Promise<ConversionRecord[]>
+  getExportLogs: (limit?: number) => Promise<any[]>
   getReviewCount: () => Promise<number>
   deleteHistoryItem: (id: number) => Promise<ConversionRecord | null>
   restoreHistoryItem: (id: number) => Promise<ConversionRecord | null>
@@ -114,7 +120,10 @@ export interface MarkFlowApi {
     status?: string
     category?: string
     tag?: string
+    group?: string
+    todayOnly?: boolean
     includeArchived?: boolean
+    limit?: number
   }) => Promise<ConversionRecord[]>
   updateFrontmatter: (
     slug: string,
@@ -197,7 +206,18 @@ const api: MarkFlowApi = {
     sourceLocation?: string
   ) => ipcRenderer.invoke('engine:convert', filePath, libraryDir, profile, llmConfig, sourceLocation),
   selectFilesOrFolders: () => ipcRenderer.invoke('dialog:open-files'),
+  getPathForFile: (file: File) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        const p = webUtils.getPathForFile(file)
+        if (p) return p
+      }
+    } catch {}
+    return (file as any)?.path || ''
+  },
+  resolveDroppedPaths: (paths: string[]) => ipcRenderer.invoke('dialog:resolve-paths', paths),
   getHistory: (params) => ipcRenderer.invoke('db:get-history', params),
+  getExportLogs: (limit?: number) => ipcRenderer.invoke('db:get-export-logs', limit),
   getReviewCount: () => ipcRenderer.invoke('db:get-review-count'),
   deleteHistoryItem: (id: number) => ipcRenderer.invoke('db:delete-item', id),
   restoreHistoryItem: (id: number) => ipcRenderer.invoke('db:restore-item', id),

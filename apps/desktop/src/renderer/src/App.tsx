@@ -31,7 +31,9 @@ export const App: React.FC = () => {
   // Phase 2 & 3 state: Queue, Profile & History
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [profile, setProfile] = useState<'balanced' | 'fast' | 'best_quality'>('balanced')
+  const [maxConcurrency, setMaxConcurrency] = useState<number>(2)
   const [autoConvert, setAutoConvert] = useState(true)
+  const [manualBatchActive, setManualBatchActive] = useState(false)
   const [historyItems, setHistoryItems] = useState<ConversionRecord[]>([])
   const [selectedItem, setSelectedItem] = useState<ConversionRecord | null>(null)
   const [detailViewItem, setDetailViewItem] = useState<ConversionRecord | null>(null)
@@ -71,7 +73,28 @@ export const App: React.FC = () => {
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
 
-  // First launch check for Onboarding Wizard
+  const syncUserSettings = useCallback(async () => {
+    if (!window.markflowApi?.getSettings) return
+    try {
+      const res = await window.markflowApi.getSettings()
+      const s = res?.settings
+      if (s?.conversion?.defaultProfile) {
+        setProfile(s.conversion.defaultProfile)
+      }
+      if (s?.conversion?.concurrency && typeof s.conversion.concurrency === 'number') {
+        setMaxConcurrency(Math.max(1, Math.min(4, s.conversion.concurrency)))
+      }
+      if (s?.general?.theme) {
+        if (s.general.theme === 'dark') setIsDark(true)
+        else if (s.general.theme === 'light') setIsDark(false)
+        else if (s.general.theme === 'system' && typeof window.matchMedia === 'function') {
+          setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches)
+        }
+      }
+    } catch {}
+  }, [])
+
+  // First launch check for Onboarding Wizard & load initial settings
   useEffect(() => {
     try {
       const completed = localStorage.getItem('markflow_onboarding_completed')
@@ -79,7 +102,8 @@ export const App: React.FC = () => {
         setIsOnboardingOpen(true)
       }
     } catch {}
-  }, [])
+    syncUserSettings()
+  }, [syncUserSettings])
 
   // Global Keyboard Shortcuts Listener
   useEffect(() => {
@@ -373,12 +397,16 @@ export const App: React.FC = () => {
     }
   }
 
-  // Concurrency queue processor (max 2 parallel conversions)
+  // Concurrency queue processor
   useEffect(() => {
-    if (!autoConvert && activeConversions === 0) return
-
     const pendingItems = queue.filter((i) => i.status === 'pending')
-    const availableSlots = 2 - activeConversions
+    if (pendingItems.length === 0 && activeConversions === 0 && manualBatchActive) {
+      setManualBatchActive(false)
+      return
+    }
+    if (!autoConvert && !manualBatchActive && activeConversions === 0) return
+
+    const availableSlots = maxConcurrency - activeConversions
 
     if (pendingItems.length > 0 && availableSlots > 0 && engineStatus.state === 'ready') {
       const toProcess = pendingItems.slice(0, availableSlots)
@@ -386,18 +414,16 @@ export const App: React.FC = () => {
         processItem(item)
       }
     }
-  }, [queue, activeConversions, autoConvert, engineStatus.state])
+  }, [queue, activeConversions, autoConvert, manualBatchActive, maxConcurrency, engineStatus.state])
 
-  // Trigger convert all manually
+  // Trigger convert all manually (including retrying failed items)
   const handleConvertAll = () => {
-    const pendingItems = queue.filter((i) => i.status === 'pending' || i.status === 'failed')
-    const availableSlots = 2 - activeConversions
-    if (availableSlots > 0) {
-      const toProcess = pendingItems.slice(0, availableSlots)
-      for (const item of toProcess) {
-        processItem(item)
-      }
-    }
+    setQueue((prev) =>
+      prev.map((item) =>
+        item.status === 'failed' ? { ...item, status: 'pending', errorMessage: undefined } : item
+      )
+    )
+    setManualBatchActive(true)
   }
 
   // Delete document with undo toast
@@ -434,10 +460,11 @@ export const App: React.FC = () => {
     if (!window.markflowApi?.getBoardDocuments) return
     try {
       const res = await window.markflowApi.getBoardDocuments({ limit: 200 })
-      if (res && res.items) {
-        const found = res.items.find(
+      const items: ConversionRecord[] = Array.isArray(res) ? res : (res as any)?.items || []
+      if (items.length > 0) {
+        const found = items.find(
           (d: any) =>
-            d.slug.toLowerCase() === target.toLowerCase() ||
+            d.slug?.toLowerCase() === target.toLowerCase() ||
             (d.title && d.title.toLowerCase() === target.toLowerCase())
         )
         if (found) {
@@ -655,7 +682,10 @@ export const App: React.FC = () => {
         {/* Settings Modal */}
         <SettingsModal
           isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
+          onClose={() => {
+            setIsSettingsOpen(false)
+            syncUserSettings()
+          }}
         />
 
         {/* Export Progress Modal */}
