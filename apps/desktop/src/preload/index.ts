@@ -9,12 +9,14 @@ export interface EngineStatus {
 }
 
 export interface ConversionRecord {
-  id: number
+  id?: number
   slug: string
   title: string
   source_file: string
   source_path?: string
   source_type: string
+  source_location?: string
+  file_hash?: string
   file_size?: number
   converted_at: string
   library_path: string
@@ -23,6 +25,12 @@ export interface ConversionRecord {
   profile?: string
   markdown?: string
   exported_json?: string
+  tags?: string[]
+  tags_json?: string
+  category?: string
+  first_image?: string
+  custom_json?: string
+  is_deleted?: number
   created_at?: string
 }
 
@@ -38,7 +46,15 @@ export interface MarkFlowApi {
     sourceLocation?: string
   ) => Promise<any>
   selectFilesOrFolders: () => Promise<{ path: string; name: string; size: number }[]>
-  getHistory: (params?: { search?: string; sort?: 'latest' | 'name'; reviewOnly?: boolean }) => Promise<ConversionRecord[]>
+  getHistory: (params?: {
+    search?: string
+    sort?: 'latest' | 'name' | 'score'
+    reviewOnly?: boolean
+    status?: string
+    category?: string
+    tag?: string
+    includeArchived?: boolean
+  }) => Promise<ConversionRecord[]>
   getReviewCount: () => Promise<number>
   deleteHistoryItem: (id: number) => Promise<ConversionRecord | null>
   restoreHistoryItem: (id: number) => Promise<ConversionRecord | null>
@@ -89,6 +105,40 @@ export interface MarkFlowApi {
   exportToCloudDestination: (params: { destinationId: string; itemIds: number[] }) => Promise<any>
   reloadWatchFolders: () => Promise<{ success: boolean; count: number }>
   onWatchFileDetected: (callback: (fileEvent: any) => void) => () => void
+
+  // Phase 7: Notion-style Board & Frontmatter APIs
+  getBoardDocuments: (params?: {
+    search?: string
+    sort?: 'latest' | 'name' | 'score'
+    status?: string
+    category?: string
+    tag?: string
+    includeArchived?: boolean
+  }) => Promise<ConversionRecord[]>
+  updateFrontmatter: (
+    slug: string,
+    updates: Record<string, any>
+  ) => Promise<ConversionRecord | null>
+  createDocument: (params: {
+    title?: string
+    category?: string
+    tags?: string[]
+    content?: string
+  }) => Promise<ConversionRecord>
+  duplicateDocument: (slug: string) => Promise<ConversionRecord | null>
+  archiveDocument: (slug: string, isArchived: boolean) => Promise<ConversionRecord | null>
+  rebuildIndex: () => Promise<{ indexedCount: number; errors: string[] }>
+  batchUpdateDocuments: (
+    slugs: string[],
+    operations: {
+      status?: string
+      addTag?: string
+      removeTag?: string
+      category?: string
+      delete?: boolean
+    }
+  ) => Promise<{ successCount: number; errors: string[] }>
+  onLibraryChanged: (callback: (event: any) => void) => () => void
 }
 
 const api: MarkFlowApi = {
@@ -137,6 +187,22 @@ const api: MarkFlowApi = {
     ipcRenderer.on('watch:file-detected', subscription)
     return () => {
       ipcRenderer.removeListener('watch:file-detected', subscription)
+    }
+  },
+
+  // Phase 7: Board methods
+  getBoardDocuments: (params) => ipcRenderer.invoke('board:get-documents', params),
+  updateFrontmatter: (slug, updates) => ipcRenderer.invoke('board:update-frontmatter', slug, updates),
+  createDocument: (params) => ipcRenderer.invoke('board:create-document', params),
+  duplicateDocument: (slug) => ipcRenderer.invoke('board:duplicate-document', slug),
+  archiveDocument: (slug, isArchived) => ipcRenderer.invoke('board:archive-document', slug, isArchived),
+  rebuildIndex: () => ipcRenderer.invoke('board:rebuild-index'),
+  batchUpdateDocuments: (slugs, operations) => ipcRenderer.invoke('board:batch-update', slugs, operations),
+  onLibraryChanged: (callback: (event: any) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, event: any) => callback(event)
+    ipcRenderer.on('library:external-changed', subscription)
+    return () => {
+      ipcRenderer.removeListener('library:external-changed', subscription)
     }
   }
 }

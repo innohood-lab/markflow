@@ -8,6 +8,7 @@ import { ToastUndo } from './components/ToastUndo'
 import { DetailViewer } from './components/DetailViewer'
 import { SettingsModal } from './components/SettingsModal'
 import { ExportProgressModal } from './components/ExportProgressModal'
+import { BoardView } from './components/board/BoardView'
 import { EngineStatus, ConversionRecord } from '../../preload'
 import { Plus } from 'lucide-react'
 
@@ -463,6 +464,11 @@ export const App: React.FC = () => {
                     )}
                   </div>
                 }
+              />
+            ) : currentView === 'library' ? (
+              <BoardView
+                onOpenDetail={(item) => setDetailViewItem(item)}
+                onExport={(target, ids) => handleExport(target, ids)}
               />
             ) : (
               <div className="flex-1 flex flex-col justify-center items-center">

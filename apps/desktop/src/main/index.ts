@@ -25,10 +25,29 @@ import { exportDocumentsToObsidian } from './services/obsidianExporter'
 import { LocalFolderAdapter } from './services/storageAdapter'
 import { detectCloudStorageFolders } from './services/cloudDetector'
 import { WatchFolderService } from './services/watchFolderService'
+import {
+  updateDocumentFrontmatter,
+  createNewDocument,
+  duplicateDocument,
+  archiveDocument,
+  rebuildLibraryIndex,
+  batchUpdateDocuments
+} from './services/documentService'
+import { LibraryWatcher } from './services/libraryWatcher'
 
 let mainWindow: BrowserWindow | null = null
 const sidecar = new SidecarManager()
 const watchFolderService = new WatchFolderService(5000)
+const libraryWatcher = new LibraryWatcher()
+
+function getLibraryDir(): string {
+  const home = app.getPath('documents')
+  const dir = join(home, 'MarkFlow', 'Library')
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
 
 const SUPPORTED_EXTS = new Set([
   '.docx',
@@ -496,6 +515,35 @@ ipcMain.handle('watch:reload', () => {
   return { success: true, count: activeWatchPaths.length }
 })
 
+// IPC Handlers: Phase 7 Board & Documents
+ipcMain.handle('board:get-documents', (_event, params) => {
+  return getConversions(params)
+})
+
+ipcMain.handle('board:update-frontmatter', (_event, slug: string, updates: Record<string, any>) => {
+  return updateDocumentFrontmatter(slug, updates)
+})
+
+ipcMain.handle('board:create-document', (_event, params: any) => {
+  return createNewDocument({ ...params, libraryDir: getLibraryDir() })
+})
+
+ipcMain.handle('board:duplicate-document', (_event, slug: string) => {
+  return duplicateDocument(slug, getLibraryDir())
+})
+
+ipcMain.handle('board:archive-document', (_event, slug: string, isArchived: boolean) => {
+  return archiveDocument(slug, isArchived)
+})
+
+ipcMain.handle('board:rebuild-index', () => {
+  return rebuildLibraryIndex(getLibraryDir())
+})
+
+ipcMain.handle('board:batch-update', (_event, slugs: string[], operations: any) => {
+  return batchUpdateDocuments(slugs, operations)
+})
+
 app.whenReady().then(async () => {
   createWindow()
 
@@ -517,6 +565,18 @@ app.whenReady().then(async () => {
     })
   } catch (err) {
     console.warn('[Main] Failed to initialize watch folder service:', err)
+  }
+
+  // Start library watcher for external changes
+  try {
+    const libDir = getLibraryDir()
+    libraryWatcher.start(libDir, (event) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('library:external-changed', event)
+      }
+    })
+  } catch (err) {
+    console.warn('[Main] Failed to initialize library watcher:', err)
   }
 
   app.on('activate', function () {
