@@ -1,0 +1,85 @@
+appId: com.innohood.markflow
+productName: MarkFlow
+copyright: Copyright © 2026 Kyujin Park (innohood)
+
+directories:
+  output: ../../dist
+  buildResources: build
+
+npmRebuild: false
+
+files:
+  - out/**/*
+  - '!out/**/*.map'
+  - package.json
+
+extraResources:
+  - from: ../../engine/dist/engine
+    to: engine
+    filter:
+      - '**/*'
+
+win:
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-Windows-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MarkFlow
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: ${productName}-Windows-Portable-${version}.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - universal
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - universal
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  artifactName: ${productName}-macOS-${version}-${arch}.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+fileAssociations:
+  - ext: docx
+    name: Microsoft Word Document
+    role: Viewer
+  - ext: pptx
+    name: Microsoft PowerPoint Presentation
+    role: Viewer
+  - ext: xlsx
+    name: Microsoft Excel Spreadsheet
+    role: Viewer
+  - ext: pdf
+    name: Portable Document Format
+    role: Viewer
+  - ext: md
+    name: Markdown Document
+    role: Editor
