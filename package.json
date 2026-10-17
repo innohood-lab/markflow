@@ -1,0 +1,12 @@
+{
+  "name": "markflow-root",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @markflow/desktop dev",
+    "build": "pnpm --filter @markflow/desktop build",
+    "test": "pnpm --filter @markflow/desktop test",
+    "test:engine": "cd engine && uv run pytest",
+    "test:all": "pnpm test && pnpm test:engine"
+  }
+}
