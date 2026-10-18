@@ -12,7 +12,7 @@ import {
 
 interface TodayViewProps {
   onOpenDetail: (doc: ConversionRecord) => void
-  onExport: (target: 'github' | 'obsidian' | 'both', itemIds: number[]) => void
+  onExport: (target: string, itemIds: number[]) => void
 }
 
 export const TodayView: React.FC<TodayViewProps> = ({ onOpenDetail, onExport }) => {

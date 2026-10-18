@@ -98,13 +98,22 @@ export interface MarkFlowApi {
   }>
   pickLibraryFolder: () => Promise<{ canceled: boolean; path?: string }>
   exportDocuments: (params: {
-    targets: 'github' | 'obsidian' | 'both'
+    targets: 'github' | 'obsidian' | 'both' | 'folder' | string
     itemIds: number[]
+    customFolderPath?: string
   }) => Promise<{
+    canceled?: boolean
     success: boolean
     message: string
     githubResult?: any
     obsidianResult?: any
+    folderResult?: {
+      provider: string
+      name: string
+      targetPath: string
+      targetPaths: string[]
+      message: string
+    }
   }>
   detectCloudProviders: () => Promise<any[]>
   listCloudFiles: (folderPath: string) => Promise<any[]>

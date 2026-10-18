@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { ConversionRecord } from '../../../preload'
-import { FolderOpen, Copy, Check, Trash2, FileText, Calendar, HardDrive, Highlighter, MessageSquare, X } from 'lucide-react'
+import { FolderOpen, Copy, Check, Trash2, FileText, Calendar, HardDrive, Highlighter, MessageSquare, Share2, ChevronDown, X } from 'lucide-react'
+import { ExportDropdownMenu } from './ExportDropdownMenu'
 
 interface MarkdownPreviewProps {
   item: ConversionRecord | null
@@ -8,15 +9,18 @@ interface MarkdownPreviewProps {
   onCopySuccess?: () => void
   onNavigateDocument?: (docTitleOrSlug: string) => void
   onDocumentUpdated?: (newMarkdown: string) => void
+  onExportSingle?: (id: number, target: string) => void
 }
 
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   item,
   onDelete,
   onNavigateDocument,
-  onDocumentUpdated
+  onDocumentUpdated,
+  onExportSingle
 }) => {
   const [copied, setCopied] = useState(false)
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
   const [currentMarkdown, setCurrentMarkdown] = useState<string>(item?.markdown || '')
 
   // Floating highlight/note popover state
@@ -364,7 +368,28 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 relative">
+          {onExportSingle && (
+            <div className="relative">
+              <button
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-subtle transition-colors"
+                title="폴더 선택 저장 · 클라우드 드라이브 · GitHub · Obsidian 내보내기"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>저장 · 내보내기</span>
+                <ChevronDown className="w-3 h-3 opacity-80" />
+              </button>
+
+              <ExportDropdownMenu
+                isOpen={isExportMenuOpen}
+                onClose={() => setIsExportMenuOpen(false)}
+                onSelectTarget={(target) => onExportSingle(item.id, target)}
+                align="right"
+              />
+            </div>
+          )}
+
           <button
             onClick={handleShowInFolder}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-foreground bg-card hover:bg-muted border border-border shadow-subtle transition-colors"

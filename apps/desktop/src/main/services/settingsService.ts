@@ -375,7 +375,8 @@ export async function testGitHubConnection(
  */
 export async function exportDocumentsToCloudDestination(
   documents: ConversionRecord[],
-  destination: CloudDestination
+  destination: CloudDestination,
+  options?: { directFolder?: boolean }
 ): Promise<{ success: boolean; exportedCount: number; message: string; targetPaths: string[] }> {
   if (!documents || documents.length === 0) {
     return { success: false, exportedCount: 0, targetPaths: [], message: '내보낼 문서가 없습니다.' }
@@ -396,11 +397,19 @@ export async function exportDocumentsToCloudDestination(
 
   try {
     for (const doc of documents) {
-      if (!fs.existsSync(doc.library_path)) continue
+      let content = ''
+      if (doc.library_path && fs.existsSync(doc.library_path)) {
+        content = fs.readFileSync(doc.library_path, 'utf-8')
+      } else if (doc.markdown) {
+        content = doc.markdown
+      } else {
+        continue
+      }
 
-      const content = fs.readFileSync(doc.library_path, 'utf-8')
       let baseDest = destination.targetPath
-      if (destination.folderRule === 'date') {
+      if (options?.directFolder) {
+        baseDest = destination.targetPath
+      } else if (destination.folderRule === 'date') {
         baseDest = path.join(destination.targetPath, 'MarkFlow', year, month)
       } else {
         baseDest = path.join(destination.targetPath, 'MarkFlow')
@@ -408,7 +417,7 @@ export async function exportDocumentsToCloudDestination(
       fs.mkdirSync(baseDest, { recursive: true })
 
       // Copy assets if they exist
-      const sourceAssets = path.join(path.dirname(doc.library_path), 'assets', doc.slug)
+      const sourceAssets = doc.library_path ? path.join(path.dirname(doc.library_path), 'assets', doc.slug) : ''
       const targetAssets = path.join(baseDest, 'assets', doc.slug)
       if (fs.existsSync(sourceAssets)) {
         fs.mkdirSync(targetAssets, { recursive: true })

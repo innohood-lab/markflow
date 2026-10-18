@@ -28,13 +28,14 @@ import { CompareSplitView } from './CompareSplitView'
 import { MarkdownEditor } from './MarkdownEditor'
 import { MarkdownPreview } from './MarkdownPreview'
 import { ReconvertModal } from './ReconvertModal'
+import { ExportDropdownMenu } from './ExportDropdownMenu'
 
 interface DetailViewerProps {
   item: ConversionRecord
   onBack: () => void
   onUpdateItem: (updated: ConversionRecord) => void
   onDelete: (id: number) => void
-  onExportSingle?: (itemId: number, target: 'github' | 'obsidian' | 'both') => void
+  onExportSingle?: (itemId: number, target: string) => void
   onNavigateDocument?: (titleOrSlug: string) => void
 }
 
@@ -318,51 +319,19 @@ ${bodyContent}`
             <button
               onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-subtle transition-all"
-              title="지식 저장소로 내보내기"
+              title="폴더 선택 저장 · 클라우드 드라이브 · 지식 저장소로 내보내기"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>내보내기</span>
+              <span>저장 · 내보내기</span>
               <ChevronDown className="w-3 h-3 opacity-80" />
             </button>
 
-            {isExportMenuOpen && (
-              <div
-                className="absolute right-0 top-full mt-1.5 w-48 bg-card border border-border shadow-xl rounded-xl p-1 z-30 animate-fade-in text-xs"
-                onClick={() => setIsExportMenuOpen(false)}
-              >
-                <button
-                  onClick={() => onExportSingle?.(item.id, 'github')}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-muted text-foreground text-left transition-colors"
-                >
-                  <Github className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                  <div>
-                    <div className="font-medium text-xs">GitHub LLM-wiki</div>
-                    <div className="text-[10px] text-muted-foreground">단일 커밋으로 업로드</div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => onExportSingle?.(item.id, 'obsidian')}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-muted text-foreground text-left transition-colors"
-                >
-                  <Folder className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                  <div>
-                    <div className="font-medium text-xs">Obsidian 보관함</div>
-                    <div className="text-[10px] text-muted-foreground">볼트 폴더로 복사</div>
-                  </div>
-                </button>
-                <div className="my-1 border-t border-border/60" />
-                <button
-                  onClick={() => onExportSingle?.(item.id, 'both')}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold text-left transition-colors"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <div>
-                    <div className="text-xs">둘 다 내보내기</div>
-                    <div className="text-[10px] font-normal text-muted-foreground">GitHub + Obsidian 동시</div>
-                  </div>
-                </button>
-              </div>
-            )}
+            <ExportDropdownMenu
+              isOpen={isExportMenuOpen}
+              onClose={() => setIsExportMenuOpen(false)}
+              onSelectTarget={(target) => onExportSingle?.(item.id, target)}
+              align="right"
+            />
           </div>
 
           <button

@@ -144,4 +144,53 @@ describe('Conversion & Sidecar Regression Tests', () => {
     expect(logs.length).toBeGreaterThan(0)
     expect(logs[0].target).toBe('obsidian')
   })
+
+  it('4) 클라우드 드라이브(Google Drive 등) 및 직접 선택한 로컬 폴더 내보내기가 정상 동작해야 한다', async () => {
+    const { exportDocumentsToCloudDestination } = await import('../src/main/services/settingsService')
+
+    const srcLibFile = path.join(tempDir, 'cloud-export-doc.md')
+    fs.writeFileSync(srcLibFile, '# 클라우드 저장 테스트\n구글 드라이브 및 로컬 폴더 저장 본문입니다.', 'utf-8')
+
+    const docs = [
+      {
+        slug: 'cloud-export-doc',
+        title: '클라우드 저장 테스트',
+        library_path: srcLibFile,
+        markdown: '# 클라우드 저장 테스트\n구글 드라이브 및 로컬 폴더 저장 본문입니다.'
+      }
+    ]
+
+    // 4-1. Cloud drive export (creates MarkFlow subfolder)
+    const fakeGdriveRoot = path.join(tempDir, 'GoogleDrive-MyDrive')
+    fs.mkdirSync(fakeGdriveRoot, { recursive: true })
+    const cloudRes = await exportDocumentsToCloudDestination(docs, {
+      id: 'gdrive-test',
+      provider: 'gdrive',
+      name: 'Google Drive (내 드라이브)',
+      targetPath: fakeGdriveRoot,
+      folderRule: 'flat',
+      autoSave: false
+    })
+    expect(cloudRes.exportedCount).toBe(1)
+    expect(fs.existsSync(path.join(fakeGdriveRoot, 'MarkFlow', 'cloud-export-doc.md'))).toBe(true)
+
+    // 4-2. Direct local folder export (saves directly into chosen folder without MarkFlow subfolder)
+    const directFolder = path.join(tempDir, 'MyCustomExportFolder')
+    fs.mkdirSync(directFolder, { recursive: true })
+    const directRes = await exportDocumentsToCloudDestination(
+      docs,
+      {
+        id: 'direct-folder',
+        provider: 'local',
+        name: 'MyCustomExportFolder',
+        targetPath: directFolder,
+        folderRule: 'flat',
+        autoSave: false
+      },
+      { directFolder: true }
+    )
+    expect(directRes.exportedCount).toBe(1)
+    expect(fs.existsSync(path.join(directFolder, 'cloud-export-doc.md'))).toBe(true)
+  })
 })
+

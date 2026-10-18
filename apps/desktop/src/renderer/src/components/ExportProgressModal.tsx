@@ -1,13 +1,20 @@
 import React from 'react'
-import { CheckCircle2, AlertCircle, RefreshCw, ExternalLink, X, Github, Folder } from 'lucide-react'
+import { CheckCircle2, AlertCircle, RefreshCw, ExternalLink, Github, Folder, Cloud, FolderOpen } from 'lucide-react'
 
 export interface ExportProgressModalProps {
   isOpen: boolean
-  target: 'github' | 'obsidian' | 'both'
+  target: string
   status: 'exporting' | 'success' | 'error'
   message: string
   githubResult?: { commitSha?: string; commitUrl?: string; message: string }
   obsidianResult?: { targetPaths?: string[]; message: string }
+  folderResult?: {
+    provider: string
+    name: string
+    targetPath: string
+    targetPaths: string[]
+    message: string
+  }
   errorDetails?: string
   onClose: () => void
   onRetry?: () => void
@@ -20,6 +27,7 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
   message,
   githubResult,
   obsidianResult,
+  folderResult,
   errorDetails,
   onClose,
   onRetry
@@ -27,13 +35,20 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
   if (!isOpen) return null
 
   const getTargetTitle = () => {
-    switch (target) {
-      case 'github':
-        return 'GitHub LLM-wiki로 내보내기'
-      case 'obsidian':
-        return 'Obsidian 보관함으로 내보내기'
-      case 'both':
-        return 'GitHub & Obsidian 동시 내보내기'
+    if (target === 'github') return 'GitHub LLM-wiki로 내보내기'
+    if (target === 'obsidian') return 'Obsidian 보관함으로 내보내기'
+    if (target === 'both') return 'GitHub & Obsidian 동시 내보내기'
+    if (target === 'folder') return '선택한 폴더로 문서 저장'
+    if (target.startsWith('cloud:')) {
+      return folderResult?.name ? `${folderResult.name}로 문서 저장` : '클라우드 드라이브로 문서 저장'
+    }
+    return '문서 저장 및 내보내기'
+  }
+
+  const handleOpenSavedFolder = () => {
+    const pathToOpen = folderResult?.targetPaths?.[0] || folderResult?.targetPath
+    if (pathToOpen && window.markflowApi?.showItemInFolder) {
+      window.markflowApi.showItemInFolder(pathToOpen)
     }
   }
 
@@ -69,12 +84,12 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
         </div>
 
         {/* Detailed Result Card */}
-        {status === 'success' && (
+        {status === 'success' && (githubResult || obsidianResult || folderResult) && (
           <div className="text-left bg-stone-50 dark:bg-stone-800/60 rounded-xl p-3.5 border border-stone-100 dark:border-stone-800 text-xs space-y-2">
             {githubResult && (
               <div className="flex items-start gap-2">
                 <Github size={14} className="mt-0.5 text-blue-600 shrink-0" />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="font-semibold text-stone-800 dark:text-stone-200">GitHub 커밋 생성 완료</div>
                   <div className="text-[11px] text-stone-500 font-mono">
                     커밋: {githubResult.commitSha?.slice(0, 7)}
@@ -95,13 +110,37 @@ export const ExportProgressModal: React.FC<ExportProgressModalProps> = ({
             )}
 
             {obsidianResult && (
-              <div className="flex items-start gap-2 pt-1 border-t border-stone-200/50 dark:border-stone-700/50">
+              <div className="flex items-start gap-2 pt-1 border-t border-stone-200/50 dark:border-stone-700/50 first:pt-0 first:border-t-0">
                 <Folder size={14} className="mt-0.5 text-purple-600 shrink-0" />
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="font-semibold text-stone-800 dark:text-stone-200">Obsidian 보관함 저장 완료</div>
-                  <div className="text-[11px] text-stone-500">
-                    {obsidianResult.message}
+                  <div className="text-[11px] text-stone-500">{obsidianResult.message}</div>
+                </div>
+              </div>
+            )}
+
+            {folderResult && (
+              <div className="flex items-start gap-2 pt-1 border-t border-stone-200/50 dark:border-stone-700/50 first:pt-0 first:border-t-0">
+                {folderResult.provider === 'local' ? (
+                  <FolderOpen size={14} className="mt-0.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Cloud size={14} className="mt-0.5 text-sky-600 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-stone-800 dark:text-stone-200">
+                    {folderResult.name} 저장 완료 ({folderResult.targetPaths?.length || 1}개 파일)
                   </div>
+                  <div className="text-[11px] text-stone-500 font-mono break-all mt-0.5">
+                    경로: {folderResult.targetPath}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenSavedFolder}
+                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline mt-1.5 font-medium"
+                  >
+                    <FolderOpen size={11} />
+                    저장된 폴더 열기
+                  </button>
                 </div>
               </div>
             )}

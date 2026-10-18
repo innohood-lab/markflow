@@ -5,6 +5,7 @@ import { BoardTableView } from './BoardTableView'
 import { BoardKanbanView } from './BoardKanbanView'
 import { BoardGalleryView } from './BoardGalleryView'
 import { NewDocumentModal } from './NewDocumentModal'
+import { ExportDropdownMenu } from '../ExportDropdownMenu'
 import {
   List,
   Table as TableIcon,
@@ -19,6 +20,9 @@ import {
   Archive,
   Trash2,
   Share2,
+  FolderOpen,
+  Cloud,
+  ChevronUp,
   X
 } from 'lucide-react'
 
@@ -26,7 +30,7 @@ export type BoardViewMode = 'list' | 'table' | 'kanban' | 'gallery'
 
 interface BoardViewProps {
   onOpenDetail: (doc: ConversionRecord) => void
-  onExport: (target: 'github' | 'obsidian' | 'both', itemIds: number[]) => void
+  onExport: (target: string, itemIds: number[]) => void
   groupFilter?: string
   initialSearchQuery?: string
   titleOverride?: string
@@ -56,6 +60,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
 
   // Selection state for batch actions
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
+  const [moreExportOpen, setMoreExportOpen] = useState(false)
 
   // Modal states
   const [isNewDocOpen, setIsNewDocOpen] = useState(false)
@@ -202,7 +207,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
     await loadDocuments()
   }
 
-  const handleBatchExport = (target: 'github' | 'obsidian' | 'both') => {
+  const handleBatchExport = (target: string) => {
     const selectedDocs = documents.filter((d) => selectedSlugs.has(d.slug) && d.id)
     const itemIds = selectedDocs.map((d) => d.id!)
     if (itemIds.length > 0) {
@@ -516,17 +521,43 @@ export const BoardView: React.FC<BoardViewProps> = ({
 
           {/* Export Buttons */}
           <button
-            onClick={() => handleBatchExport('github')}
-            className="px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors font-medium"
+            onClick={() => handleBatchExport('folder')}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors font-semibold whitespace-nowrap"
+            title="원하는 폴더를 직접 선택하여 저장"
           >
-            GitHub로
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span>폴더 선택 저장</span>
+          </button>
+          <button
+            onClick={() => handleBatchExport('github')}
+            className="px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors font-medium whitespace-nowrap"
+          >
+            GitHub
           </button>
           <button
             onClick={() => handleBatchExport('obsidian')}
-            className="px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors font-medium"
+            className="px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors font-medium whitespace-nowrap"
           >
-            Obsidian으로
+            Obsidian
           </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setMoreExportOpen((prev) => !prev)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors font-semibold whitespace-nowrap"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span>클라우드 · 더보기</span>
+              <ChevronUp className="w-3 h-3 opacity-80" />
+            </button>
+
+            <ExportDropdownMenu
+              isOpen={moreExportOpen}
+              onClose={() => setMoreExportOpen(false)}
+              onSelectTarget={(target) => handleBatchExport(target)}
+              align="center-up"
+            />
+          </div>
 
           {/* Delete Button */}
           <button

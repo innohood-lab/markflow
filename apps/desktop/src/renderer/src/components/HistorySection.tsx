@@ -1,6 +1,6 @@
 import React from 'react'
 import { ConversionRecord } from '../../../preload'
-import { Search, ArrowUpDown, FileText, ExternalLink, Trash2, Github, Folder } from 'lucide-react'
+import { Search, ArrowUpDown, FileText, ExternalLink, Trash2, Github, Folder, Cloud, FolderOpen } from 'lucide-react'
 import { ExportActionBar } from './ExportActionBar'
 
 interface HistorySectionProps {
@@ -16,7 +16,7 @@ interface HistorySectionProps {
   selectedIds?: Set<number>
   onToggleSelect?: (id: number) => void
   onSelectAll?: (selectAll: boolean) => void
-  onBatchExport?: (target: 'github' | 'obsidian' | 'both') => void
+  onBatchExport?: (target: string) => void
   onClearSelection?: () => void
 }
 
@@ -102,12 +102,15 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
             const isChecked = selectedIds.has(item.id)
 
             // Parse exported metadata
-            let exportedMeta: { github?: boolean; obsidian?: boolean } = {}
+            let exportedMeta: Record<string, boolean> = {}
             if (item.exported_json) {
               try {
                 exportedMeta = JSON.parse(item.exported_json)
               } catch {}
             }
+            const hasCloudExport = Boolean(
+              exportedMeta.gdrive || exportedMeta.icloud || exportedMeta.onedrive || exportedMeta.dropbox
+            )
 
             return (
               <div
@@ -167,6 +170,24 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
                         >
                           <Folder size={9} />
                           obsidian
+                        </span>
+                      )}
+                      {hasCloudExport && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 shrink-0"
+                          title="클라우드 드라이브에 저장됨"
+                        >
+                          <Cloud size={9} />
+                          cloud
+                        </span>
+                      )}
+                      {exportedMeta.local && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0"
+                          title="지정한 로컬 폴더에 저장됨"
+                        >
+                          <FolderOpen size={9} />
+                          folder
                         </span>
                       )}
                     </div>

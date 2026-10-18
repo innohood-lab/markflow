@@ -531,8 +531,11 @@ ipcMain.handle('settings:pick-library-folder', async () => {
 // IPC Handlers: Export
 ipcMain.handle(
   'export:documents',
-  async (_event, params: { targets: 'github' | 'obsidian' | 'both'; itemIds: number[] }) => {
-    const { targets, itemIds } = params
+  async (
+    _event,
+    params: { targets: string; itemIds: number[]; customFolderPath?: string }
+  ) => {
+    const { targets, itemIds, customFolderPath } = params
     if (!itemIds || itemIds.length === 0) {
       return { success: false, message: '내보낼 항목이 선택되지 않았습니다.' }
     }
@@ -545,6 +548,97 @@ ipcMain.handle(
       return { success: false, message: '내보낼 문서를 찾을 수 없습니다.' }
     }
 
+    // 1. Direct local/cloud folder picker ('folder' or explicit customFolderPath)
+    if (targets === 'folder' || customFolderPath) {
+      let targetDir = customFolderPath
+      if (!targetDir) {
+        if (!mainWindow) {
+          return { canceled: true, success: false, message: '창이 활성화되어 있지 않습니다.' }
+        }
+        const picked = await dialog.showOpenDialog(mainWindow, {
+          title: 'Markdown 문서를 저장할 폴더 선택 (로컬 또는 Google Drive · iCloud · OneDrive 등)',
+          buttonLabel: '여기에 저장',
+          properties: ['openDirectory', 'createDirectory']
+        })
+        if (picked.canceled || picked.filePaths.length === 0) {
+          return { canceled: true, success: false, message: '폴더 선택이 취소되었습니다.' }
+        }
+        targetDir = picked.filePaths[0]
+      }
+
+      const folderName = targetDir.split(/[\\/]/).filter(Boolean).pop() || '선택한 폴더'
+      const destResult = await exportDocumentsToCloudDestination(
+        docs,
+        {
+          id: 'local-folder',
+          provider: 'local',
+          name: folderName,
+          targetPath: targetDir,
+          folderRule: 'flat',
+          autoSave: false
+        },
+        { directFolder: true }
+      )
+
+      return {
+        success: destResult.success,
+        folderResult: {
+          provider: 'local',
+          name: folderName,
+          targetPath: targetDir,
+          targetPaths: destResult.targetPaths,
+          message: destResult.message
+        },
+        message: destResult.message
+      }
+    }
+
+    // 2. Detected cloud provider or registered cloud destination ('cloud:<id>')
+    if (targets.startsWith('cloud:')) {
+      const cloudId = targets.slice('cloud:'.length)
+      const settings = loadSettings(false)
+      let dest = (settings.cloudDestinations || []).find((d) => d.id === cloudId)
+
+      if (!dest) {
+        const detected = detectCloudStorageFolders(settings.customCloudFolders || [])
+        const found = detected.find((d) => d.id === cloudId || d.provider === cloudId)
+        if (found) {
+          dest = {
+            id: found.id,
+            provider: found.provider,
+            name: found.name,
+            targetPath: found.path,
+            folderRule: 'flat',
+            autoSave: false
+          }
+        }
+      }
+
+      if (!dest) {
+        return {
+          success: false,
+          message:
+            '선택한 클라우드 저장 경로를 찾을 수 없습니다. [폴더 직접 선택 저장]을 이용하거나 환경 설정에서 경로를 등록해 주세요.'
+        }
+      }
+
+      const destResult = await exportDocumentsToCloudDestination(docs, dest)
+      const savedDir = join(dest.targetPath, 'MarkFlow')
+
+      return {
+        success: destResult.success,
+        folderResult: {
+          provider: dest.provider,
+          name: dest.name,
+          targetPath: savedDir,
+          targetPaths: destResult.targetPaths,
+          message: destResult.message
+        },
+        message: destResult.message
+      }
+    }
+
+    // 3. GitHub / Obsidian / Both
     let githubResult = null
     let obsidianResult = null
 

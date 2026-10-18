@@ -53,11 +53,12 @@ export const App: React.FC = () => {
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<number>>(new Set())
   const [exportModalState, setExportModalState] = useState<{
     isOpen: boolean
-    target: 'github' | 'obsidian' | 'both'
+    target: string
     status: 'exporting' | 'success' | 'error'
     message: string
     githubResult?: any
     obsidianResult?: any
+    folderResult?: any
     errorDetails?: string
     pendingIds?: number[]
   }>({
@@ -178,16 +179,64 @@ export const App: React.FC = () => {
   }
 
   // Export handler (single or batch)
-  const handleExport = async (target: 'github' | 'obsidian' | 'both', itemIds: number[]) => {
+  const handleExport = async (target: string, itemIds: number[]) => {
     if (!itemIds || itemIds.length === 0) return
+
+    // For direct folder selection, open native dialog first so user can cancel cleanly
+    if (target === 'folder') {
+      try {
+        const res = await window.markflowApi.exportDocuments({ targets: 'folder', itemIds })
+        if (res?.canceled) {
+          return
+        }
+        if (res.success) {
+          setExportModalState({
+            isOpen: true,
+            target: 'folder',
+            status: 'success',
+            message: res.message,
+            folderResult: res.folderResult,
+            pendingIds: itemIds
+          })
+          await loadHistory()
+          setSelectedHistoryIds(new Set())
+        } else {
+          setExportModalState({
+            isOpen: true,
+            target: 'folder',
+            status: 'error',
+            message: '폴더 저장 중 문제가 발생했습니다.',
+            errorDetails: res.message,
+            pendingIds: itemIds
+          })
+        }
+      } catch (err: any) {
+        setExportModalState({
+          isOpen: true,
+          target: 'folder',
+          status: 'error',
+          message: '폴더 저장 실행 실패',
+          errorDetails: err.message || '알 수 없는 오류',
+          pendingIds: itemIds
+        })
+      }
+      return
+    }
+
+    const targetLabel =
+      target === 'both'
+        ? 'GitHub 및 Obsidian'
+        : target === 'github'
+          ? 'GitHub'
+          : target === 'obsidian'
+            ? 'Obsidian'
+            : '선택한 클라우드 폴더'
 
     setExportModalState({
       isOpen: true,
       target,
       status: 'exporting',
-      message: `${itemIds.length}개 문서를 ${
-        target === 'both' ? 'GitHub 및 Obsidian' : target === 'github' ? 'GitHub' : 'Obsidian'
-      }으로 내보내는 중...`,
+      message: `${itemIds.length}개 문서를 ${targetLabel}에 저장하는 중...`,
       pendingIds: itemIds
     })
 
@@ -199,7 +248,8 @@ export const App: React.FC = () => {
           status: 'success',
           message: res.message,
           githubResult: res.githubResult,
-          obsidianResult: res.obsidianResult
+          obsidianResult: res.obsidianResult,
+          folderResult: res.folderResult
         }))
         // Refresh list
         await loadHistory()
@@ -592,6 +642,7 @@ export const App: React.FC = () => {
                             item={selectedItem}
                             onDelete={handleDeleteItem}
                             onNavigateDocument={handleNavigateDocument}
+                            onExportSingle={(id, target) => handleExport(target, [id])}
                             onDocumentUpdated={(newMd) => {
                               setSelectedItem({ ...selectedItem, markdown: newMd })
                               loadHistory()
@@ -697,6 +748,7 @@ export const App: React.FC = () => {
           message={exportModalState.message}
           githubResult={exportModalState.githubResult}
           obsidianResult={exportModalState.obsidianResult}
+          folderResult={exportModalState.folderResult}
           errorDetails={exportModalState.errorDetails}
           onClose={() => setExportModalState((prev) => ({ ...prev, isOpen: false }))}
           onRetry={() => {
