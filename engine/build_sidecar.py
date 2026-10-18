@@ -9,7 +9,9 @@ from pathlib import Path
 def build():
     engine_root = Path(__file__).resolve().parent
     entrypoint = engine_root / "src" / "markflow_engine" / "main.py"
-    dist_dir = engine_root / "dist" / "engine"
+    dist_root = engine_root / "dist"
+    dist_dir = dist_root / "engine"
+    pyi_out_dir = dist_root / "markflow-engine"
     build_dir = engine_root / "build"
 
     if not entrypoint.exists():
@@ -19,8 +21,12 @@ def build():
     print(f"[Build] Target entrypoint: {entrypoint}")
     print(f"[Build] Distribution directory: {dist_dir}")
 
-    # Ensure clean output directory
-    dist_dir.mkdir(parents=True, exist_ok=True)
+    # Clean previous dist directories
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+    if pyi_out_dir.exists():
+        shutil.rmtree(pyi_out_dir)
+    dist_root.mkdir(parents=True, exist_ok=True)
 
     is_win = platform.system() == "Windows"
     binary_name = "markflow-engine.exe" if is_win else "markflow-engine"
@@ -30,10 +36,10 @@ def build():
         "-m",
         "PyInstaller",
         "--name=markflow-engine",
-        "--onefile",
+        "--onedir",
         "--clean",
         "--noconfirm",
-        f"--distpath={dist_dir}",
+        f"--distpath={dist_root}",
         f"--workpath={build_dir / 'work'}",
         f"--specpath={build_dir / 'spec'}",
         "--collect-all=markitdown",
@@ -47,9 +53,9 @@ def build():
         "--hidden-import=uvicorn.protocols",
         "--hidden-import=uvicorn.protocols.http",
         "--hidden-import=uvicorn.protocols.http.auto",
-        "--hidden-import=uvicorn.lifespans",
-        "--hidden-import=uvicorn.lifespans.on",
-        "--hidden-import=uvicorn.lifespans.off",
+        "--hidden-import=uvicorn.lifespan",
+        "--hidden-import=uvicorn.lifespan.on",
+        "--hidden-import=uvicorn.lifespan.off",
         "--hidden-import=fastapi",
         "--hidden-import=pypdf",
         "--hidden-import=readability",
@@ -66,12 +72,18 @@ def build():
         str(entrypoint),
     ]
 
+    env = os.environ.copy()
+    env["PYINSTALLER_CONFIG_DIR"] = str(build_dir / "pyinstaller-cache")
+
     print(f"[Build] Executing command: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(engine_root))
+    result = subprocess.run(cmd, cwd=str(engine_root), env=env)
 
     if result.returncode != 0:
         print("[Build] PyInstaller build failed!", file=sys.stderr)
         sys.exit(result.returncode)
+
+    if pyi_out_dir.exists():
+        shutil.move(str(pyi_out_dir), str(dist_dir))
 
     target_binary = dist_dir / binary_name
     if not target_binary.exists():
@@ -84,3 +96,4 @@ def build():
 
 if __name__ == "__main__":
     build()
+

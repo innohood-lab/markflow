@@ -6,7 +6,7 @@ directories:
   output: ../../dist
   buildResources: build
 
-npmRebuild: true
+npmRebuild: false
 
 asarUnpack:
   - '**/*.node'
@@ -48,17 +48,13 @@ mac:
   target:
     - target: dmg
       arch:
-        - universal
         - arm64
-        - x64
     - target: zip
       arch:
-        - universal
         - arm64
-        - x64
   category: public.app-category.productivity
   artifactName: ${productName}-macOS-${version}-${arch}.${ext}
-  hardenedRuntime: true
+  hardenedRuntime: false
   gatekeeperAssess: false
 
 dmg:

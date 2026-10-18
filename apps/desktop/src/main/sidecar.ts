@@ -173,7 +173,7 @@ export class SidecarManager {
           PYTHONUNBUFFERED: '1',
           MARKFLOW_ENGINE_SECRET: this.secret || ''
         },
-        shell: process.platform === 'win32',
+        shell: cmd === 'uv' && process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe']
       })
 
@@ -218,8 +218,8 @@ export class SidecarManager {
         }
       })
 
-      // Wait for health check with 15-second timeout
-      const ready = await this.waitForHealth(this.port, 15000)
+      // Wait for health check with 45-second timeout
+      const ready = await this.waitForHealth(this.port, 45000)
       if (ready.success) {
         this.restartCount = 0 // Reset restart counter on success
         this.setStatus({
@@ -233,7 +233,7 @@ export class SidecarManager {
       } else {
         this.setStatus({
           state: 'error',
-          error: ready.error || '엔진 응답 시간(15초)을 초과했습니다.'
+          error: ready.error || '엔진 응답 시간(45초)을 초과했습니다.'
         })
       }
 
