@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "pnpm --filter @markflow/desktop dev",
     "build": "pnpm --filter @markflow/desktop build",
+    "engine:sync": "cd engine && uv sync",
     "build:engine": "cd engine && uv run python build_sidecar.py",
     "build:all": "pnpm build:engine && pnpm build",
     "dist": "pnpm --filter @markflow/desktop dist",
