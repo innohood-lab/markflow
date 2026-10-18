@@ -5,8 +5,8 @@
   "main": "./out/main/index.js",
   "author": "Kyujin Park <innohood@gmail.com>",
   "scripts": {
-    "postinstall": "node ./node_modules/electron/install.js",
-    "dev": "node ./node_modules/electron/install.js && electron-vite dev --watch -c electron-vite.config.ts",
+    "postinstall": "node ./scripts/ensure-electron.cjs",
+    "dev": "node ./scripts/ensure-electron.cjs && electron-vite dev --watch -c electron-vite.config.ts",
     "build": "electron-vite build -c electron-vite.config.ts",
     "preview": "electron-vite preview -c electron-vite.config.ts",
     "test": "vitest run",
