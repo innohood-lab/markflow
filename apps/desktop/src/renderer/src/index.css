@@ -84,3 +84,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
 }
+
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-drag-region button,
+.app-drag-region input,
+.app-drag-region select,
+.app-drag-region a {
+  -webkit-app-region: no-drag;
+}
+
+button:focus {
+  outline: none;
+}
+

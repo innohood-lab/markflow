@@ -116,7 +116,7 @@ export const LogbookView: React.FC<LogbookViewProps> = () => {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6 select-none bg-background">
-      <div className="mb-6">
+      <div className="mb-6 app-drag-region">
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <span>기록 (Logbook)</span>
         </h1>

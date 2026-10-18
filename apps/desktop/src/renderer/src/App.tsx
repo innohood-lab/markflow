@@ -514,94 +514,95 @@ export const App: React.FC = () => {
           />
         ) : (
           <>
-            {/* Top Header */}
-            <header className="px-6 py-4 shrink-0 border-b border-border/40 select-text flex items-center justify-between">
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-foreground">
-                  {currentView === 'review' ? '검토 필요' : '수집함'}
-                </h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {currentView === 'review'
-                    ? '품질 점수가 70점 미만이거나 스캔 등 확인이 필요한 문서 목록입니다'
-                    : '새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  {currentView === 'review' ? '검토 대상' : '보관 문서'}:{' '}
-                  <strong className="text-foreground">{historyItems.length}</strong>건
-                </span>
-              </div>
-            </header>
-
             {/* 2-Pane Split: Left Queue, Right History & Preview */}
             {currentView === 'inbox' || currentView === 'review' ? (
-              <SplitPane
-                defaultLeftWidthPercent={42}
-                minLeftWidth={320}
-                minRightWidth={420}
-                left={
-                  <QueueSection
-                    queue={queue}
-                    onAddFiles={handleAddFiles}
-                    onRemoveItem={handleRemoveQueueItem}
-                    onClearQueue={handleClearQueue}
-                    onConvertAll={handleConvertAll}
-                    onRetryItem={(id) => {
-                      setQueue((prev) =>
-                        prev.map((q) => (q.id === id ? { ...q, status: 'pending', errorMessage: undefined } : q))
-                      )
-                    }}
-                    autoConvert={autoConvert}
-                    onToggleAutoConvert={setAutoConvert}
-                    isConverting={activeConversions > 0}
-                    profile={profile}
-                    onProfileChange={setProfile}
-                  />
-                }
-                right={
-                  <div className="flex-1 flex flex-col h-full overflow-hidden">
-                    {/* Upper Right: History List (Takes top half if preview open, full if not) */}
-                    <div
-                      className={`overflow-hidden transition-all duration-normal flex flex-col ${
-                        selectedItem ? 'h-64 border-b border-border/60 shrink-0' : 'flex-1'
-                      }`}
-                    >
-                      <HistorySection
-                        items={historyItems}
-                        selectedItem={selectedItem}
-                        onSelectItem={setSelectedItem}
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                        sortOrder={sortOrder}
-                        onSortChange={setSortOrder}
-                        onDelete={handleDeleteItem}
-                        onOpenDetail={(item) => setDetailViewItem(item)}
-                        selectedIds={selectedHistoryIds}
-                        onToggleSelect={handleToggleSelect}
-                        onSelectAll={handleSelectAll}
-                        onBatchExport={(target) => handleExport(target, Array.from(selectedHistoryIds))}
-                        onClearSelection={handleClearSelection}
-                      />
-                    </div>
-
-                    {/* Lower Right: Rendered Markdown Preview */}
-                    {selectedItem && (
-                      <div className="flex-1 overflow-hidden flex flex-col">
-                        <MarkdownPreview
-                          item={selectedItem}
+              <>
+                {/* Top Header */}
+                <header className="px-6 py-4 shrink-0 border-b border-border/60 select-text flex items-center justify-between app-drag-region">
+                  <div>
+                    <h1 className="text-xl font-bold tracking-tight text-foreground">
+                      {currentView === 'review' ? '검토 필요' : '수집함'}
+                    </h1>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {currentView === 'review'
+                        ? '품질 점수가 70점 미만이거나 스캔 등 확인이 필요한 문서 목록입니다'
+                        : '새로 들어온 문서를 분류하고 고품질 Markdown으로 변환하세요'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {currentView === 'review' ? '검토 대상' : '보관 문서'}:{' '}
+                      <strong className="text-foreground">{historyItems.length}</strong>건
+                    </span>
+                  </div>
+                </header>
+                <SplitPane
+                  defaultLeftWidthPercent={42}
+                  minLeftWidth={320}
+                  minRightWidth={420}
+                  left={
+                    <QueueSection
+                      queue={queue}
+                      onAddFiles={handleAddFiles}
+                      onRemoveItem={handleRemoveQueueItem}
+                      onClearQueue={handleClearQueue}
+                      onConvertAll={handleConvertAll}
+                      onRetryItem={(id) => {
+                        setQueue((prev) =>
+                          prev.map((q) => (q.id === id ? { ...q, status: 'pending', errorMessage: undefined } : q))
+                        )
+                      }}
+                      autoConvert={autoConvert}
+                      onToggleAutoConvert={setAutoConvert}
+                      isConverting={activeConversions > 0}
+                      profile={profile}
+                      onProfileChange={setProfile}
+                    />
+                  }
+                  right={
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                      {/* Upper Right: History List (Takes top half if preview open, full if not) */}
+                      <div
+                        className={`overflow-hidden transition-all duration-normal flex flex-col ${
+                          selectedItem ? 'h-64 border-b border-border/60 shrink-0' : 'flex-1'
+                        }`}
+                      >
+                        <HistorySection
+                          items={historyItems}
+                          selectedItem={selectedItem}
+                          onSelectItem={setSelectedItem}
+                          searchQuery={searchQuery}
+                          onSearchChange={setSearchQuery}
+                          sortOrder={sortOrder}
+                          onSortChange={setSortOrder}
                           onDelete={handleDeleteItem}
-                          onNavigateDocument={handleNavigateDocument}
-                          onDocumentUpdated={(newMd) => {
-                            setSelectedItem({ ...selectedItem, markdown: newMd })
-                            loadHistory()
-                          }}
+                          onOpenDetail={(item) => setDetailViewItem(item)}
+                          selectedIds={selectedHistoryIds}
+                          onToggleSelect={handleToggleSelect}
+                          onSelectAll={handleSelectAll}
+                          onBatchExport={(target) => handleExport(target, Array.from(selectedHistoryIds))}
+                          onClearSelection={handleClearSelection}
                         />
                       </div>
-                    )}
-                  </div>
-                }
-              />
+
+                      {/* Lower Right: Rendered Markdown Preview */}
+                      {selectedItem && (
+                        <div className="flex-1 overflow-hidden flex flex-col">
+                          <MarkdownPreview
+                            item={selectedItem}
+                            onDelete={handleDeleteItem}
+                            onNavigateDocument={handleNavigateDocument}
+                            onDocumentUpdated={(newMd) => {
+                              setSelectedItem({ ...selectedItem, markdown: newMd })
+                              loadHistory()
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  }
+                />
+              </>
             ) : currentView === 'today' ? (
               <TodayView
                 onOpenDetail={(item) => setDetailViewItem(item)}

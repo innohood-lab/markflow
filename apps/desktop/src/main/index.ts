@@ -136,6 +136,7 @@ function createWindow(): void {
     title: 'MarkFlow',
     backgroundColor: '#ffffff',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 18 } : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,

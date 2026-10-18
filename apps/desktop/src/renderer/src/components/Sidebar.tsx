@@ -175,7 +175,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="w-64 h-full bg-sidebar flex flex-col border-r border-sidebar-border select-none shrink-0 transition-colors duration-normal">
       {/* Top Header / App Brand (Things style minimal) */}
-      <div className="h-12 flex items-center px-4 font-semibold text-sm tracking-tight text-foreground gap-2">
+      <div
+        className={`h-12 flex items-center ${
+          typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+            ? 'pl-20 pr-4'
+            : 'px-4'
+        } font-semibold text-sm tracking-tight text-foreground gap-2 shrink-0 app-drag-region`}
+      >
         <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shadow-subtle">
           M
         </div>

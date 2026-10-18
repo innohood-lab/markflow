@@ -26,7 +26,7 @@ export const TodayView: React.FC<TodayViewProps> = ({ onOpenDetail, onExport }) 
       const docs = await window.markflowApi.getBoardDocuments({
         todayOnly: true
       })
-      setDocuments(docs || [])
+      setDocuments(Array.isArray(docs) ? docs : (docs as any)?.items || [])
     } catch (err) {
       console.error('[TodayView] Failed to load today documents:', err)
     } finally {
@@ -132,7 +132,7 @@ export const TodayView: React.FC<TodayViewProps> = ({ onOpenDetail, onExport }) 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-6 select-none bg-background">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-6 app-drag-region">
         <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
           <span>오늘</span>
           <span className="text-xs font-normal text-muted-foreground">({todayFormatted})</span>

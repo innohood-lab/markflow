@@ -75,7 +75,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
         group: groupFilter || undefined,
         includeArchived
       })
-      setDocuments(docs || [])
+      setDocuments(Array.isArray(docs) ? docs : (docs as any)?.items || [])
     } catch (err) {
       console.error('[BoardView] Failed to load documents:', err)
     } finally {
@@ -219,7 +219,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background relative select-none">
       {/* 1. Board Header: Search, View Mode Toggle & Actions */}
-      <header className="px-6 py-3.5 border-b border-border/40 shrink-0 flex flex-col gap-3">
+      <header className="px-6 py-3.5 border-b border-border/40 shrink-0 flex flex-col gap-3 app-drag-region">
         {/* Top row: Title + Rebuild Message + View Mode Segmented Button + New Doc Button */}
         <div className="flex items-center justify-between gap-4">
           <div>
