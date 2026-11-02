@@ -1,3 +1,29 @@
+<div align="center">
+
+# Markflow 🚀
+### High-Performance Markdown Pipeline & LLM Workflow Automation Engine
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/innohood-lab/markflow?include_prereleases&style=flat-square)](https://github.com/innohood-lab/markflow/releases)
+[![Codex for Open Source](https://img.shields.io/badge/OpenAI-Codex%20for%20OSS-412991?style=flat-square&logo=openai)](https://openai.com/form/codex-for-oss)
+[![CI/CD Pipeline](https://img.shields.io/github/actions/workflow/status/innohood-lab/markflow/ci.yml?style=flat-square)](https://github.com/innohood-lab/markflow/actions)
+
+*A robust open-source engine designed to streamline structured text processing, markdown parsing, and context generation for modern AI coding and documentation workflows.*
+
+</div>
+
+---
+
+## 📖 Overview
+
+**Markflow** is an open-source workflow automation utility built to bridge unstructured documentation and large language model (LLM) pipelines. It addresses common formatting fragmentation by automatically transforming, validating, and structuring markdown datasets for seamless integration into AI agents and developer tooling.
+
+### ✨ Key Features
+- **Structured Markdown Parsing**: Converts complex documents into clean, token-optimized structures for LLM ingestion.
+- **Automated Transformation Pipelines**: Streamlines content refactoring, schema validation, and text normalization.
+- **Cross-Agent Compatibility**: Fully optimized to generate consistent contexts for OpenAI Codex, Claude Code, and multi-agent systems.
+
+---
 # MarkFlow: 온디바이스 마크다운 지식 보관소 (PKM Desktop Platform)
 
 [![GitHub Release](https://img.shields.io/github/v/release/innohood-lab/markflow?color=blue&style=flat-square)](https://github.com/innohood-lab/markflow/releases)
